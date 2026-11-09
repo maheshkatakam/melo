@@ -11,5 +11,8 @@
 .cxx/
 *.jks
 *.keystore
+# The release key is committed encrypted (AES-256); its password lives only in the
+# MELO_KEYSTORE_PASSWORD repository secret.
+!signing/melo-release.jks
 # The speech model (~190 MB) is downloaded at build time, not stored in git.
 /app/src/main/assets/models/*.bin

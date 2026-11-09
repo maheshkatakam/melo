@@ -59,7 +59,7 @@ curl -L -o app/src/main/assets/models/ggml-small-q5_1.bin \
 ./gradlew assembleRelease
 ```
 
-Release signing reads `MELO_KEYSTORE_PATH`, `MELO_KEYSTORE_PASSWORD`, `MELO_KEY_ALIAS` and `MELO_KEY_PASSWORD` from the environment (the workflow fills these from repo secrets).
+Release signing uses `signing/melo-release.jks` (encrypted). Its password is the `MELO_KEYSTORE_PASSWORD` repository secret; locally, set `MELO_KEYSTORE_PATH`, `MELO_KEYSTORE_PASSWORD`, `MELO_KEY_ALIAS=melo` and `MELO_KEY_PASSWORD` (same password) in the environment.
 
 ## Tech
 

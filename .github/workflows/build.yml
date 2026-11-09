@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
       MODEL_FILE: ggml-small-q5_1.bin
@@ -51,21 +51,22 @@ jobs:
 
       - name: Prepare signing key
         env:
-          KEYSTORE_B64: ${{ secrets.MELO_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.MELO_KEYSTORE_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/melo.jks"
-            echo "MELO_KEYSTORE_PATH=$RUNNER_TEMP/melo.jks" >> "$GITHUB_ENV"
-            echo "Using the release signing key."
+          if [ -n "$KEYSTORE_PASSWORD" ]; then
+            {
+              echo "MELO_KEYSTORE_PATH=$GITHUB_WORKSPACE/signing/melo-release.jks"
+              echo "MELO_KEY_ALIAS=melo"
+            } >> "$GITHUB_ENV"
+            echo "Using the Melo release key."
           else
-            echo "::warning::No signing key secret found; the APK is signed with a temporary debug key."
+            echo "::warning::MELO_KEYSTORE_PASSWORD secret is missing, so this APK is signed with a temporary key and won't install over earlier versions."
           fi
 
       - name: Build release APK
         env:
           MELO_KEYSTORE_PASSWORD: ${{ secrets.MELO_KEYSTORE_PASSWORD }}
-          MELO_KEY_ALIAS: ${{ secrets.MELO_KEY_ALIAS }}
-          MELO_KEY_PASSWORD: ${{ secrets.MELO_KEY_PASSWORD }}
+          MELO_KEY_PASSWORD: ${{ secrets.MELO_KEYSTORE_PASSWORD }}
           MELO_VERSION_CODE: ${{ github.run_number }}
           MELO_VERSION_NAME: 1.0.${{ github.run_number }}
         run: |
