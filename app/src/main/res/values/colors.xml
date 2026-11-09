@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="melo_background">#FF0F1014</color>
+    <color name="melo_accent">#FFFF7A59</color>
+    <color name="melo_icon_bg_start">#FFFF7A59</color>
+    <color name="melo_icon_bg_end">#FF8B5CF6</color>
+</resources>

@@ -1,0 +1,15 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/app/build/
+/app/.cxx/
+/captures/
+.externalNativeBuild/
+.cxx/
+*.jks
+*.keystore
+# The speech model (~190 MB) is downloaded at build time, not stored in git.
+/app/src/main/assets/models/*.bin

@@ -1,0 +1,380 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
+package com.maheshkatakam.melo.ui.sound
+
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.maheshkatakam.melo.audio.Moods
+import com.maheshkatakam.melo.audio.SoundProfile
+import com.maheshkatakam.melo.ui.LocalContainer
+import com.maheshkatakam.melo.ui.LocalNavigator
+import com.maheshkatakam.melo.ui.components.BackTopBar
+import com.maheshkatakam.melo.ui.components.ConfirmDialog
+import com.maheshkatakam.melo.ui.player.MoodTile
+import java.util.Locale
+
+@Composable
+fun SoundScreen() {
+    val container = LocalContainer.current
+    val navigator = LocalNavigator.current
+    val effects = container.effects
+    val moods by effects.moods.collectAsStateWithLifecycle()
+    val current by effects.currentMood.collectAsStateWithLifecycle()
+    val support by effects.support.collectAsStateWithLifecycle()
+    val settings by container.settings.settings.collectAsStateWithLifecycle()
+
+    var editing by remember(current.id, current.profile) { mutableStateOf(current.profile) }
+    val dirty = editing != current.profile
+    var saving by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+
+    LaunchedEffect(editing, dirty) { effects.preview(if (dirty) editing else null) }
+    DisposableEffect(Unit) { onDispose { effects.preview(null) } }
+
+    if (saving) {
+        SaveMoodDialog(
+            initialName = if (current.custom) current.name else "",
+            canUpdate = current.custom,
+            onDismiss = { saving = false },
+            onSave = { name, icon, asNew ->
+                saving = false
+                effects.saveCustomMood(name, icon, editing, existingId = if (current.custom && !asNew) current.id else null)
+            },
+        )
+    }
+    if (deleting) {
+        ConfirmDialog(
+            title = "Delete \"${current.name}\"?",
+            message = "This custom mood will be removed.",
+            confirm = "Delete",
+            onDismiss = { deleting = false },
+            onConfirm = { effects.deleteCustomMood(current.id) },
+        )
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        BackTopBar("Sound & moods", onBack = { navigator.back() })
+        LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
+            item {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(moods, key = { it.id }) { mood ->
+                        MoodTile(mood, selected = mood.id == current.id, modifier = Modifier.width(104.dp)) {
+                            effects.setMood(mood.id)
+                        }
+                    }
+                }
+            }
+            item {
+                Text(
+                    current.description,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+            }
+
+            item {
+                Card("Equalizer") {
+                    if (!support.equalizer) {
+                        Note("Your phone didn't allow Melo's equalizer. Bass and surround may still work.")
+                    }
+                    SoundProfile.BAND_LABELS.forEachIndexed { i, label ->
+                        LabeledSlider(
+                            title = SoundProfile.BAND_NAMES[i],
+                            detail = label,
+                            valueText = String.format(Locale.US, "%+.1f dB", editing.bands[i]),
+                            value = editing.bands[i],
+                            range = -SoundProfile.MAX_DB..SoundProfile.MAX_DB,
+                            onChange = { v ->
+                                editing = editing.copy(bands = editing.bands.toMutableList().also { it[i] = (v * 2).toInt() / 2f })
+                            },
+                        )
+                    }
+                }
+            }
+            item {
+                Card("Effects") {
+                    LabeledSlider(
+                        title = "Bass boost",
+                        detail = if (support.bass) null else "Not supported on this phone",
+                        valueText = "${editing.bass / 10}%",
+                        value = editing.bass.toFloat(),
+                        range = 0f..1000f,
+                        onChange = { editing = editing.copy(bass = it.toInt()) },
+                    )
+                    LabeledSlider(
+                        title = "Surround",
+                        detail = if (support.virtualizer) "Best with headphones" else "Not supported on this phone",
+                        valueText = "${editing.virtualizer / 10}%",
+                        value = editing.virtualizer.toFloat(),
+                        range = 0f..1000f,
+                        onChange = { editing = editing.copy(virtualizer = it.toInt()) },
+                    )
+                    LabeledSlider(
+                        title = "Loudness",
+                        detail = if (support.loudness) "Extra volume for quiet songs" else "Not supported on this phone",
+                        valueText = String.format(Locale.US, "+%.1f dB", editing.loudness / 100f),
+                        value = editing.loudness.toFloat(),
+                        range = 0f..1000f,
+                        onChange = { editing = editing.copy(loudness = it.toInt()) },
+                    )
+                }
+            }
+            item {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Button(onClick = { saving = true }, enabled = dirty || !current.custom) {
+                        Text(if (current.custom) "Save" else "Save as my mood")
+                    }
+                    if (dirty) {
+                        OutlinedButton(onClick = { editing = current.profile }) { Text("Reset") }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (current.custom) {
+                        TextButton(onClick = { deleting = true }) {
+                            Icon(Icons.Rounded.Delete, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Delete")
+                        }
+                    }
+                }
+                if (dirty) {
+                    Note(
+                        "You're hearing your changes now. Save them to keep them as a mood.",
+                        Modifier.padding(horizontal = 20.dp),
+                    )
+                }
+            }
+
+            item {
+                Card("Playback") {
+                    var speed by remember(settings.playbackSpeed) { mutableFloatStateOf(settings.playbackSpeed) }
+                    var pitch by remember(settings.playbackPitch) { mutableFloatStateOf(settings.playbackPitch) }
+                    LabeledSlider(
+                        title = "Speed",
+                        detail = null,
+                        valueText = String.format(Locale.US, "%.2fx", speed),
+                        value = speed,
+                        range = 0.5f..2f,
+                        steps = 5,
+                        onChange = { speed = it },
+                        onFinished = { container.settings.setSpeed(speed) },
+                    )
+                    LabeledSlider(
+                        title = "Pitch",
+                        detail = null,
+                        valueText = String.format(Locale.US, "%.2f", pitch),
+                        value = pitch,
+                        range = 0.75f..1.25f,
+                        steps = 9,
+                        onChange = { pitch = it },
+                        onFinished = { container.settings.setPitch(pitch) },
+                    )
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { container.settings.setSkipSilence(!settings.skipSilence) }
+                            .padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Skip silence", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "Trims quiet gaps between and inside songs",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(checked = settings.skipSilence, onCheckedChange = { container.settings.setSkipSilence(it) })
+                    }
+                    if (speed != 1f || pitch != 1f) {
+                        TextButton(onClick = {
+                            container.settings.setSpeed(1f)
+                            container.settings.setPitch(1f)
+                        }) { Text("Back to normal speed and pitch") }
+                    }
+                }
+            }
+            item {
+                Note(
+                    "Sound modes use your phone's built-in audio effects. If your phone or Bluetooth headphones " +
+                        "have their own equalizer (like Dolby), it can change how these sound.",
+                    Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Card(title: String, content: @Composable () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            content()
+        }
+    }
+}
+
+@Composable
+private fun Note(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(vertical = 4.dp),
+    )
+}
+
+@Composable
+private fun LabeledSlider(
+    title: String,
+    detail: String?,
+    valueText: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    onChange: (Float) -> Unit,
+    steps: Int = 0,
+    onFinished: (() -> Unit)? = null,
+) {
+    Column(Modifier.padding(top = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            if (detail != null) {
+                Text(
+                    "  ·  $detail",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            Text(valueText, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        }
+        Slider(
+            value = value.coerceIn(range.start, range.endInclusive),
+            onValueChange = onChange,
+            valueRange = range,
+            steps = steps,
+            onValueChangeFinished = onFinished,
+        )
+    }
+}
+
+@Composable
+private fun SaveMoodDialog(
+    initialName: String,
+    canUpdate: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (name: String, icon: String, asNew: Boolean) -> Unit,
+) {
+    var name by remember { mutableStateOf(initialName) }
+    var icon by remember { mutableStateOf(Moods.customIcons.keys.first()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (canUpdate) "Save mood" else "Name your mood") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(24) },
+                    label = { Text("Mood name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(14.dp))
+                Text("Icon", style = MaterialTheme.typography.labelLarge)
+                Spacer(Modifier.height(6.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(Moods.customIcons.entries.toList(), key = { it.key }) { (key, vector) ->
+                        val selected = key == icon
+                        Box(
+                            Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .then(
+                                    if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier,
+                                )
+                                .clickable { icon = key },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                vector,
+                                null,
+                                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(name, icon, !canUpdate) }, enabled = name.isNotBlank()) {
+                Text(if (canUpdate) "Update" else "Save")
+            }
+        },
+        dismissButton = {
+            if (canUpdate) {
+                TextButton(onClick = { onSave(name, icon, true) }, enabled = name.isNotBlank()) { Text("Save as new") }
+            } else {
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
+}
