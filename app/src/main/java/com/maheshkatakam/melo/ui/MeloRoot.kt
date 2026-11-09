@@ -46,6 +46,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.maheshkatakam.melo.data.Song
 import com.maheshkatakam.melo.ui.components.SongMenuSheet
+import com.maheshkatakam.melo.ui.discover.DiscoveredScreen
+import com.maheshkatakam.melo.ui.discover.IdentifySheet
 import com.maheshkatakam.melo.ui.home.HomeScreen
 import com.maheshkatakam.melo.ui.library.AlbumScreen
 import com.maheshkatakam.melo.ui.library.ArtistScreen
@@ -70,7 +72,7 @@ private val tabs = listOf(
 )
 
 @Composable
-fun MeloRoot(openPlayerSignal: StateFlow<Int>) {
+fun MeloRoot(openPlayerSignal: StateFlow<Int>, identifySignal: StateFlow<Int>) {
     val container = LocalContainer.current
     val hasPermission by container.music.hasPermission.collectAsStateWithLifecycle()
     if (!hasPermission) {
@@ -84,6 +86,7 @@ fun MeloRoot(openPlayerSignal: StateFlow<Int>) {
     val now by container.player.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var songMenu by remember { mutableStateOf<Pair<Song, Long?>?>(null) }
+    var identifying by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         container.lyrics.messages.collect { snackbar.showSnackbar(it) }
@@ -95,11 +98,17 @@ fun MeloRoot(openPlayerSignal: StateFlow<Int>) {
         }
     }
 
+    val identifyRequest by identifySignal.collectAsStateWithLifecycle()
+    LaunchedEffect(identifyRequest) {
+        if (identifyRequest > 0) identifying = true
+    }
+
     val navigator = remember(nav) { NavigatorImpl(nav) }
 
     CompositionLocalProvider(
         LocalNavigator provides navigator,
         LocalSongMenu provides SongMenuLauncher { song, playlistId -> songMenu = song to playlistId },
+        LocalIdentify provides { identifying = true },
     ) {
         Scaffold(
             snackbarHost = { SnackbarHost(snackbar) },
@@ -150,6 +159,7 @@ fun MeloRoot(openPlayerSignal: StateFlow<Int>) {
                 composable("collection/{kind}") { entry ->
                     CollectionScreen(entry.arguments?.getString("kind").orEmpty())
                 }
+                composable("discovered") { DiscoveredScreen() }
                 composable("sound") { SoundScreen() }
                 composable("settings") { SettingsScreen() }
             }
@@ -157,6 +167,15 @@ fun MeloRoot(openPlayerSignal: StateFlow<Int>) {
 
         songMenu?.let { (song, playlistId) ->
             SongMenuSheet(song, playlistId) { songMenu = null }
+        }
+        if (identifying) {
+            IdentifySheet(
+                onDismiss = { identifying = false },
+                onOpenDiscovered = {
+                    identifying = false
+                    navigator.openDiscovered()
+                },
+            )
         }
     }
 }
@@ -193,6 +212,7 @@ private class NavigatorImpl(private val nav: NavHostController) : Navigator {
     override fun openFolder(path: String) = nav.navigate("folder/${Uri.encode(path)}")
     override fun openPlaylist(id: Long) = nav.navigate("playlist/$id")
     override fun openCollection(kind: String) = nav.navigate("collection/${Uri.encode(kind)}")
+    override fun openDiscovered() = nav.navigate("discovered") { launchSingleTop = true }
     override fun openSound() = nav.navigate("sound") { launchSingleTop = true }
     override fun openSettings() = nav.navigate("settings") { launchSingleTop = true }
     override fun back() {

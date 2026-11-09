@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Melo</string>
+    <string name="identify_song">Identify song</string>
+    <string name="shortcut_identify_short">Identify song</string>
+    <string name="shortcut_identify_long">Identify a song playing nearby</string>
+    <string name="share_to_melo">Save to Melo</string>
 </resources>

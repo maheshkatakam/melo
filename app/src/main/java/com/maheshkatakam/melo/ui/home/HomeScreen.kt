@@ -31,6 +31,8 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.LibraryAdd
 import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.TravelExplore
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
@@ -56,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.maheshkatakam.melo.data.Song
 import com.maheshkatakam.melo.ui.LocalContainer
+import com.maheshkatakam.melo.ui.LocalIdentify
 import com.maheshkatakam.melo.ui.LocalNavigator
 import com.maheshkatakam.melo.ui.LocalSongMenu
 import com.maheshkatakam.melo.ui.components.CenteredLoading
@@ -83,6 +86,8 @@ fun HomeScreen() {
     val playlists by container.library.playlists.collectAsStateWithLifecycle()
     val moods by container.effects.moods.collectAsStateWithLifecycle()
     val mood by container.effects.currentMood.collectAsStateWithLifecycle()
+    val discovered by container.discoveries.discoveries.collectAsStateWithLifecycle()
+    val identify = LocalIdentify.current
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) {
@@ -117,6 +122,9 @@ fun HomeScreen() {
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                IconButton(onClick = { identify() }) {
+                    Icon(Icons.Rounded.Mic, "Identify a song")
                 }
                 IconButton(onClick = { importLauncher.launch(arrayOf("audio/*")) }) {
                     Icon(Icons.Rounded.LibraryAdd, "Add songs")
@@ -183,6 +191,14 @@ fun HomeScreen() {
                     QuickTile(Icons.AutoMirrored.Rounded.QueueMusic, "${mood.name} mix", Modifier.weight(1f)) {
                         navigator.openCollection("mood:${mood.id}")
                     }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    QuickTile(Icons.Rounded.Mic, "Identify a song", Modifier.weight(1f)) { identify() }
+                    QuickTile(
+                        Icons.Rounded.TravelExplore,
+                        if (discovered.isEmpty()) "Discovered" else "Discovered (${discovered.size})",
+                        Modifier.weight(1f),
+                    ) { navigator.openDiscovered() }
                 }
             }
         }

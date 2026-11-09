@@ -16,6 +16,9 @@
         android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
 
+    <!-- Song identification: records a few seconds of music playing around you -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <!-- Playback -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
@@ -26,9 +29,14 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Equalizer / bass boost for mood sound modes -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <!-- Only used when you choose to download a translation language pack -->
+    <!-- Used for translation packs and song identification -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Lets the "Open Shazam" button find the Shazam app -->
+    <queries>
+        <package android:name="com.shazam.android" />
+    </queries>
 
     <application
         android:name=".MeloApp"
@@ -52,6 +60,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="com.maheshkatakam.melo.IDENTIFY" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
             <!-- "Open with Melo" from a file manager -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -73,6 +88,34 @@
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
+
+        <!-- "Share → Save to Melo" from Shazam (or any app) -->
+        <activity
+            android:name=".discover.ShareReceiverActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/share_to_melo"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.Melo.Invisible">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!-- Quick Settings tile -->
+        <service
+            android:name=".discover.IdentifyTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_identify"
+            android:label="@string/identify_song"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
 

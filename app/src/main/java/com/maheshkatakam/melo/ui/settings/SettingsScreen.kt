@@ -62,6 +62,9 @@ import com.maheshkatakam.melo.ui.LocalContainer
 import com.maheshkatakam.melo.ui.LocalNavigator
 import com.maheshkatakam.melo.ui.components.BackTopBar
 import com.maheshkatakam.melo.ui.components.LyricsBatchCard
+import com.maheshkatakam.melo.ui.components.TextInputDialog
+import com.maheshkatakam.melo.ui.discover.AUDD_DASHBOARD
+import com.maheshkatakam.melo.ui.discover.openUrl
 import com.maheshkatakam.melo.ui.components.songCount
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -81,6 +84,7 @@ fun SettingsScreen() {
     val downloaded by container.translator.downloaded.collectAsStateWithLifecycle()
     val downloading by container.translator.downloading.collectAsStateWithLifecycle()
     var showAllLanguages by remember { mutableStateOf(false) }
+    var editingKey by remember { mutableStateOf(false) }
     var allFilesGranted by remember { mutableStateOf(hasAllFilesAccess()) }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { allFilesGranted = hasAllFilesAccess() }
@@ -90,6 +94,21 @@ fun SettingsScreen() {
         val all = container.translator.available
         val featured = featuredLanguages.filter { it in all }
         if (showAllLanguages) featured + all.filter { it !in featured }.sortedBy { languageName(it) } else featured
+    }
+
+    if (editingKey) {
+        TextInputDialog(
+            title = "AudD key",
+            label = "Paste your key from dashboard.audd.io",
+            confirm = "Save",
+            initial = settings.auddToken,
+            onDismiss = { editingKey = false },
+            onConfirm = {
+                container.settings.setAuddToken(it)
+                editingKey = false
+                scope.launch { container.discoveries.identifyPending() }
+            },
+        )
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -214,6 +233,51 @@ fun SettingsScreen() {
                 }
             }
             item { LyricsBatchCard(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), showWhenDone = true) }
+
+            item { Header("Song identification") }
+            item {
+                Group {
+                    val hasKey = settings.auddToken.isNotBlank()
+                    Text("Identify songs playing around you", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Uses AudD. New accounts get 300 free identifications; after that it's \$5 a month only if you want more. " +
+                            "Your key stays on this phone.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            if (hasKey) "Key saved · ••••" + settings.auddToken.takeLast(4) else "No key yet",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (hasKey) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { editingKey = true }) { Text(if (hasKey) "Change" else "Add key") }
+                        if (hasKey) TextButton(onClick = { container.settings.setAuddToken("") }) { Text("Remove") }
+                    }
+                    if (!hasKey) {
+                        OutlinedButton(onClick = { openUrl(context, AUDD_DASHBOARD) }) { Text("Get a free key") }
+                    }
+                    SwitchRow(
+                        "Add to Favorites when downloaded",
+                        "When a song you identified shows up in your library, Melo adds it to Favorites",
+                        settings.autoFavoriteDiscovered,
+                    ) { container.settings.setAutoFavoriteDiscovered(it) }
+                    SwitchRow(
+                        "Use the found cover",
+                        "If that song has no picture, Melo uses the cover from the identification",
+                        settings.useDiscoveredCovers,
+                    ) { container.settings.setUseDiscoveredCovers(it) }
+                    Text(
+                        "Shazam works too: in Shazam tap Share › Save to Melo. For quick access, add the \"Identify song\" " +
+                            "tile to your Quick Settings, or long-press the Melo icon.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
 
             item { Header("Translation packs") }
             item {

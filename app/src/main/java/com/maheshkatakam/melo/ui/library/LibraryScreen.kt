@@ -41,6 +41,7 @@ import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.LibraryAdd
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.TravelExplore
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.DropdownMenu
@@ -353,6 +354,7 @@ private fun PlaylistsTab() {
     val navigator = LocalNavigator.current
     val playlists by container.library.playlists.collectAsStateWithLifecycle()
     val favorites by container.library.favorites.collectAsStateWithLifecycle()
+    val discovered by container.discoveries.discoveries.collectAsStateWithLifecycle()
     var creating by remember { mutableStateOf(false) }
 
     if (creating) {
@@ -391,6 +393,19 @@ private fun PlaylistsTab() {
                 Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f), modifier = Modifier.fillMaxSize()) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(Icons.Rounded.Favorite, null, tint = MaterialTheme.colorScheme.secondary)
+                    }
+                }
+            }
+        }
+        item {
+            PlaylistRowLayout(
+                title = "Discovered",
+                subtitle = if (discovered.isEmpty()) "Songs you identify" else songCount(discovered.size),
+                onClick = { navigator.openDiscovered() },
+            ) {
+                Surface(shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.2f), modifier = Modifier.fillMaxSize()) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.TravelExplore, null, tint = MaterialTheme.colorScheme.tertiary)
                     }
                 }
             }

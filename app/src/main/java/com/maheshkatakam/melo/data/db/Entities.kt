@@ -68,3 +68,29 @@ data class CustomMoodEntity(
     val loudness: Int,
     val createdAt: Long,
 )
+
+/**
+ * A song you identified (or shared from Shazam) so you can find it later.
+ * [status] is one of [com.maheshkatakam.melo.discover.DiscoveryStatus].
+ */
+@Entity(tableName = "discoveries")
+data class DiscoveryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val status: String,
+    val title: String?,
+    val artist: String?,
+    val album: String?,
+    val releaseDate: String?,
+    /** Cover saved on the phone, so it shows offline. */
+    val artworkPath: String?,
+    val songLink: String?,
+    val spotifyUrl: String?,
+    val appleMusicUrl: String?,
+    /** The 10-second recording, kept until it has been identified. */
+    val clipPath: String?,
+    /** "melo" (built-in) or "shared" (from Shazam or another app). */
+    val source: String,
+    val createdAt: Long,
+    /** The song in your library once you've downloaded it. */
+    val matchedSongId: Long?,
+)

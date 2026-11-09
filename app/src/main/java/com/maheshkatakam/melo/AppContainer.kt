@@ -12,6 +12,7 @@ import com.maheshkatakam.melo.data.MusicRepository
 import com.maheshkatakam.melo.data.SettingsRepository
 import com.maheshkatakam.melo.data.SongImporter
 import com.maheshkatakam.melo.data.db.MeloDatabase
+import com.maheshkatakam.melo.discover.DiscoveryRepository
 import com.maheshkatakam.melo.lyrics.LyricsRepository
 import com.maheshkatakam.melo.lyrics.LyricsTranslator
 import com.maheshkatakam.melo.lyrics.ai.AiLyricsEngine
@@ -39,6 +40,8 @@ class AppContainer(val app: Application) {
     val lyrics = LyricsRepository(app, db.lyrics(), music, library, translator, aiEngine, settings, scope)
 
     val player = PlayerConnection(app, scope, music, artwork)
+
+    val discoveries = DiscoveryRepository(app, db.discoveries(), music, library, artwork, settings, scope)
 
     val imageLoader: ImageLoader = ImageLoader.Builder(app)
         .components {

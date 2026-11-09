@@ -21,9 +21,13 @@ interface Navigator {
     fun openFolder(path: String)
     fun openPlaylist(id: Long)
     fun openCollection(kind: String)
+    fun openDiscovered()
     fun openSound()
     fun openSettings()
     fun back()
 }
 
 val LocalNavigator = staticCompositionLocalOf<Navigator> { error("Navigator not provided") }
+
+/** Opens the "Identify song" sheet from anywhere in the UI. */
+val LocalIdentify = staticCompositionLocalOf<() -> Unit> { {} }

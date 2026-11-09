@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Update
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -130,4 +131,28 @@ interface CustomMoodDao {
 
     @Query("DELETE FROM custom_moods WHERE id = :id")
     suspend fun delete(id: String)
+}
+
+@Dao
+interface DiscoveryDao {
+    @Query("SELECT * FROM discoveries ORDER BY createdAt DESC")
+    fun observeAll(): Flow<List<DiscoveryEntity>>
+
+    @Query("SELECT * FROM discoveries WHERE id = :id")
+    suspend fun get(id: Long): DiscoveryEntity?
+
+    @Query("SELECT * FROM discoveries WHERE status = 'pending' ORDER BY createdAt")
+    suspend fun pending(): List<DiscoveryEntity>
+
+    @Insert
+    suspend fun insert(entity: DiscoveryEntity): Long
+
+    @Update
+    suspend fun update(entity: DiscoveryEntity)
+
+    @Query("UPDATE discoveries SET matchedSongId = :songId WHERE id = :id")
+    suspend fun setMatch(id: Long, songId: Long)
+
+    @Query("DELETE FROM discoveries WHERE id = :id")
+    suspend fun delete(id: Long)
 }

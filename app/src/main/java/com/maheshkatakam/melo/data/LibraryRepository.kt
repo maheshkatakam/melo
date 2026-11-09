@@ -70,6 +70,10 @@ class LibraryRepository(
         }
     }
 
+    suspend fun addFavorite(songId: Long) {
+        if (db.favorites().count(songId) == 0) db.favorites().add(FavoriteEntity(songId, System.currentTimeMillis()))
+    }
+
     fun createPlaylist(name: String, initialSongs: List<Long> = emptyList(), onCreated: (Long) -> Unit = {}) {
         scope.launch {
             val now = System.currentTimeMillis()

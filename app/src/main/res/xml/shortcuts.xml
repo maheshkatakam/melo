@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_identify"
+        android:shortcutId="identify"
+        android:shortcutShortLabel="@string/shortcut_identify_short"
+        android:shortcutLongLabel="@string/shortcut_identify_long">
+        <intent
+            android:action="com.maheshkatakam.melo.IDENTIFY"
+            android:targetClass="com.maheshkatakam.melo.MainActivity"
+            android:targetPackage="com.maheshkatakam.melo" />
+    </shortcut>
+</shortcuts>

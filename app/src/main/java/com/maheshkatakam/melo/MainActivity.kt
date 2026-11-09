@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 class MainActivity : ComponentActivity() {
 
     private val openPlayerRequests = MutableStateFlow(0)
+    private val identifyRequests = MutableStateFlow(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -28,7 +29,7 @@ class MainActivity : ComponentActivity() {
             val settings by container.settings.settings.collectAsStateWithLifecycle()
             MeloTheme(settings) {
                 CompositionLocalProvider(LocalContainer provides container) {
-                    MeloRoot(openPlayerSignal = openPlayerRequests)
+                    MeloRoot(openPlayerSignal = openPlayerRequests, identifySignal = identifyRequests)
                 }
             }
         }
@@ -48,7 +49,9 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
         val data = intent.data
-        if (intent.action == Intent.ACTION_VIEW && data != null) {
+        if (intent.action == ACTION_IDENTIFY) {
+            identifyRequests.value = identifyRequests.value + 1
+        } else if (intent.action == Intent.ACTION_VIEW && data != null) {
             appContainer.player.playExternal(data, null)
             openPlayerRequests.value = openPlayerRequests.value + 1
         } else if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) {
@@ -58,5 +61,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_OPEN_PLAYER = "open_player"
+        const val ACTION_IDENTIFY = "com.maheshkatakam.melo.IDENTIFY"
     }
 }

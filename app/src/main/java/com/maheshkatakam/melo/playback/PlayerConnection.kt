@@ -195,6 +195,9 @@ class PlayerConnection(
         }
     }
 
+    fun pause() = withController { it.pause() }
+    fun resume() = withController { if (it.mediaItemCount > 0) it.play() }
+
     fun next() = withController { it.seekToNext() }
     fun previous() = withController { it.seekToPrevious() }
 
