@@ -110,7 +110,15 @@ interface LyricsDao {
 
     @Query("SELECT COUNT(*) FROM lyrics WHERE source = 'ai'")
     fun observeAiCount(): Flow<Int>
+
+    @Query("SELECT songId, source, (english IS NOT NULL) AS hasEnglish FROM lyrics")
+    fun observeStatus(): Flow<List<LyricsStatus>>
+
+    @Query("SELECT songId, source, (english IS NOT NULL) AS hasEnglish FROM lyrics")
+    suspend fun statusList(): List<LyricsStatus>
 }
+
+data class LyricsStatus(val songId: Long, val source: String, val hasEnglish: Boolean)
 
 @Dao
 interface CustomMoodDao {

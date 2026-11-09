@@ -20,6 +20,9 @@ import java.io.File
 
 data class AiResult(val english: Lyrics, val language: String)
 
+/** The song was readable but the AI heard nothing it could write down. */
+class NoSingingException(message: String) : Exception(message)
+
 enum class AiStage { DECODING, LOADING_MODEL, LISTENING }
 
 /**
@@ -72,7 +75,7 @@ class AiLyricsEngine(private val context: Context, private val scope: CoroutineS
             val samples = withContext(Dispatchers.Default) {
                 AudioDecoder.decode(context, song.uri) { p -> onProgress(AiStage.DECODING, (p * 100).toInt()) }
             }
-            if (samples.size < AudioDecoder.TARGET_RATE) error("The song is too short.")
+            if (samples.size < AudioDecoder.TARGET_RATE) throw NoSingingException("The song is too short.")
 
             onProgress(AiStage.LOADING_MODEL, 0)
             val h = withContext(Dispatchers.IO) { ensureModel() }
@@ -95,7 +98,7 @@ class AiLyricsEngine(private val context: Context, private val scope: CoroutineS
 
             val language = WhisperNative.detectedLanguage(h).ifBlank { "und" }
             val lines = collectLines(h)
-            if (lines.isEmpty()) error("No singing could be recognised in this song.")
+            if (lines.isEmpty()) throw NoSingingException("No singing could be recognised in this song.")
             AiResult(Lyrics(lines), language)
         } finally {
             scheduleRelease()

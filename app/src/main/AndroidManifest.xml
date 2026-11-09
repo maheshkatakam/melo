@@ -19,6 +19,9 @@
     <!-- Playback -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Lets "Get all lyrics" keep running in the background with a progress notification -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Equalizer / bass boost for mood sound modes -->
@@ -71,6 +74,15 @@
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
+        </service>
+
+        <service
+            android:name=".lyrics.LyricsService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse|dataSync">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="On-device speech recognition that writes lyrics for the user's own songs" />
         </service>
     </application>
 </manifest>

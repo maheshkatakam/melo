@@ -132,6 +132,9 @@ fun LyricsPanel(song: Song, position: Long, accent: Color, modifier: Modifier = 
             }
             running != null -> AiProgress(running, accent) { repo.cancelAi(song.id) }
             original == null && english == null -> NoLyrics(
+                aiFailed = e.source == LyricsSource.AI_FAILED,
+                batchRunning = queue.size > 1 || (aiJob != null && queue.isNotEmpty()),
+                onAll = { repo.requestAiForAll() },
                 queued = queued,
                 queuePosition = queue.indexOf(song.id),
                 aiReason = container.aiEngine.unavailableReason,
@@ -277,6 +280,9 @@ private fun lerpAccent(base: Color, accent: Color): Color =
 
 @Composable
 private fun NoLyrics(
+    aiFailed: Boolean,
+    batchRunning: Boolean,
+    onAll: () -> Unit,
     queued: Boolean,
     queuePosition: Int,
     aiReason: String?,
@@ -296,7 +302,11 @@ private fun NoLyrics(
     ) {
         Icon(Icons.Rounded.AutoAwesome, null, tint = accent, modifier = Modifier.size(44.dp))
         Spacer(Modifier.height(14.dp))
-        Text("No lyrics stored in this song", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+        Text(
+            if (aiFailed) "The AI couldn't hear any singing" else "No lyrics stored in this song",
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
+        )
         Spacer(Modifier.height(8.dp))
         when {
             queued -> {
@@ -310,8 +320,12 @@ private fun NoLyrics(
             }
             aiReason == null -> {
                 Text(
-                    "Melo can listen to this song on your phone and write the lyrics in English, " +
-                        "even if it's sung in another language. It takes a few minutes and you can keep listening.",
+                    if (aiFailed) {
+                        "It may be an instrumental, or the vocals are hard to pick out. You can try again."
+                    } else {
+                        "Melo can listen to this song on your phone and write the lyrics in English, " +
+                            "even if it's sung in another language. It takes a few minutes and you can keep listening."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -323,7 +337,10 @@ private fun NoLyrics(
                 ) {
                     Icon(Icons.Rounded.AutoAwesome, null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Make English lyrics")
+                    Text(if (aiFailed) "Try again" else "Make English lyrics")
+                }
+                if (!batchRunning) {
+                    TextButton(onClick = onAll) { Text("Do all my songs instead") }
                 }
             }
             else -> Text(

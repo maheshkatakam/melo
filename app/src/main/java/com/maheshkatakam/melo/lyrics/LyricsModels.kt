@@ -19,6 +19,8 @@ object LyricsSource {
     const val IMPORTED = "imported"
     const val PASTED = "pasted"
     const val AI = "ai"
+    /** The AI ran but heard no singing (instrumental, or the file couldn't be read). */
+    const val AI_FAILED = "ai_failed"
     const val NONE = "none"
 }
 

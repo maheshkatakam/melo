@@ -58,6 +58,7 @@ class MusicRepository(
         }
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
+    @Volatile
     private var byId: Map<Long, Song> = emptyMap()
 
     val albums: StateFlow<List<Album>> = songs.map { list ->
@@ -105,9 +106,6 @@ class MusicRepository(
         context.contentResolver.registerContentObserver(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, observer,
         )
-        scope.launch {
-            allSongs.collect { list -> byId = list.associateBy { it.id } }
-        }
         refresh()
     }
 
@@ -137,7 +135,12 @@ class MusicRepository(
             }
             _scanning.value = true
             val result = withContext(Dispatchers.IO) { runCatching { query() } }
-            result.onSuccess { allSongs.value = it }
+            result.onSuccess {
+                // Update the lookup table before publishing, so anything waiting on
+                // loadedOnce can resolve song ids straight away.
+                byId = it.associateBy { song -> song.id }
+                allSongs.value = it
+            }
                 .onFailure { Log.e("Melo", "Library scan failed", it) }
             _scanning.value = false
             _loadedOnce.value = true

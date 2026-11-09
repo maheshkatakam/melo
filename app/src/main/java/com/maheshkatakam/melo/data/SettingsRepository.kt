@@ -32,6 +32,7 @@ data class Settings(
     val moodId: String = "normal",
     val songSort: SongSort = SongSort.TITLE,
     val autoAiLyrics: Boolean = false,
+    val aiOnlyWhileCharging: Boolean = true,
     val preferOriginalLyrics: Boolean = false,
     val skipSilence: Boolean = false,
     val playbackSpeed: Float = 1f,
@@ -52,6 +53,8 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val mood = stringPreferencesKey("mood")
         val songSort = stringPreferencesKey("song_sort")
         val autoAi = booleanPreferencesKey("auto_ai_lyrics")
+        val aiOnlyCharging = booleanPreferencesKey("ai_only_while_charging")
+        val aiQueue = stringPreferencesKey("ai_queue")
         val preferOriginal = booleanPreferencesKey("prefer_original_lyrics")
         val skipSilence = booleanPreferencesKey("skip_silence")
         val speed = floatPreferencesKey("speed")
@@ -72,6 +75,7 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
                 moodId = p[Keys.mood] ?: "normal",
                 songSort = p[Keys.songSort]?.let { runCatching { SongSort.valueOf(it) }.getOrNull() } ?: SongSort.TITLE,
                 autoAiLyrics = p[Keys.autoAi] ?: false,
+                aiOnlyWhileCharging = p[Keys.aiOnlyCharging] ?: true,
                 preferOriginalLyrics = p[Keys.preferOriginal] ?: false,
                 skipSilence = p[Keys.skipSilence] ?: false,
                 playbackSpeed = p[Keys.speed] ?: 1f,
@@ -94,6 +98,15 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
     fun setMood(id: String) = edit { it[Keys.mood] = id }
     fun setSongSort(sort: SongSort) = edit { it[Keys.songSort] = sort.name }
     fun setAutoAiLyrics(on: Boolean) = edit { it[Keys.autoAi] = on }
+    fun setAiOnlyWhileCharging(on: Boolean) = edit { it[Keys.aiOnlyCharging] = on }
+
+    fun saveAiQueue(ids: List<Long>) = edit { it[Keys.aiQueue] = ids.joinToString(",") }
+
+    suspend fun loadAiQueue(): List<Long> =
+        context.dataStore.data.first()[Keys.aiQueue]
+            ?.split(',')
+            ?.mapNotNull { it.trim().toLongOrNull() }
+            .orEmpty()
     fun setPreferOriginalLyrics(on: Boolean) = edit { it[Keys.preferOriginal] = on }
     fun setSkipSilence(on: Boolean) = edit { it[Keys.skipSilence] = on }
     fun setSpeed(speed: Float) = edit { it[Keys.speed] = speed }

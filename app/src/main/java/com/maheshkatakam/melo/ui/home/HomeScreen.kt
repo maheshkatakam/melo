@@ -61,6 +61,7 @@ import com.maheshkatakam.melo.ui.LocalSongMenu
 import com.maheshkatakam.melo.ui.components.CenteredLoading
 import com.maheshkatakam.melo.ui.components.EmptyState
 import com.maheshkatakam.melo.ui.components.GeneratedCover
+import com.maheshkatakam.melo.ui.components.LyricsBatchCard
 import com.maheshkatakam.melo.ui.components.SectionHeader
 import com.maheshkatakam.melo.ui.components.SongArtwork
 import com.maheshkatakam.melo.ui.components.songCount
@@ -185,6 +186,8 @@ fun HomeScreen() {
                 }
             }
         }
+
+        item { LyricsBatchCard(Modifier.padding(horizontal = 16.dp)) }
 
         if (recent.isNotEmpty()) {
             item { SectionHeader("Jump back in", action = "See all", onAction = { navigator.openCollection("recent") }) }

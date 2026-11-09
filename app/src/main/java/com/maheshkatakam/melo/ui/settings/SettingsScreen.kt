@@ -61,6 +61,7 @@ import com.maheshkatakam.melo.lyrics.languageName
 import com.maheshkatakam.melo.ui.LocalContainer
 import com.maheshkatakam.melo.ui.LocalNavigator
 import com.maheshkatakam.melo.ui.components.BackTopBar
+import com.maheshkatakam.melo.ui.components.LyricsBatchCard
 import com.maheshkatakam.melo.ui.components.songCount
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -76,8 +77,6 @@ fun SettingsScreen() {
     val settings by container.settings.settings.collectAsStateWithLifecycle()
     val songs by container.music.songs.collectAsStateWithLifecycle()
     val scanning by container.music.scanning.collectAsStateWithLifecycle()
-    val aiJob by container.lyrics.aiJob.collectAsStateWithLifecycle()
-    val aiQueue by container.lyrics.aiQueue.collectAsStateWithLifecycle()
     val aiCount by remember { container.lyrics.aiLyricsCount }.collectAsStateWithLifecycle(initialValue = 0)
     val downloaded by container.translator.downloaded.collectAsStateWithLifecycle()
     val downloading by container.translator.downloading.collectAsStateWithLifecycle()
@@ -206,42 +205,6 @@ fun SettingsScreen() {
                             "Automatically starts for songs you play that have no English lyrics",
                             settings.autoAiLyrics,
                         ) { container.settings.setAutoAiLyrics(it) }
-                        Spacer(Modifier.height(6.dp))
-                        val job = aiJob
-                        if (job != null || aiQueue.isNotEmpty()) {
-                            Surface(
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                                    Spacer(Modifier.width(12.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(
-                                            job?.let { "Working on \"${it.title}\" · ${it.percent}%" } ?: "Starting…",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                        )
-                                        Text(
-                                            "${aiQueue.size} more waiting",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    TextButton(onClick = { container.lyrics.cancelAllAi() }) { Text("Stop") }
-                                }
-                            }
-                        } else {
-                            Button(onClick = { container.lyrics.requestAiForAll(songs) }, enabled = songs.isNotEmpty()) {
-                                Text("Make English lyrics for all songs")
-                            }
-                            Text(
-                                "Takes a few minutes per song and uses a lot of battery. Best while charging with the app open.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
                     }
                     SwitchRow(
                         "Show original language first",
@@ -250,6 +213,7 @@ fun SettingsScreen() {
                     ) { container.settings.setPreferOriginalLyrics(it) }
                 }
             }
+            item { LyricsBatchCard(Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp), showWhenDone = true) }
 
             item { Header("Translation packs") }
             item {

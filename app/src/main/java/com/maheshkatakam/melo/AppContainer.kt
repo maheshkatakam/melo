@@ -36,7 +36,7 @@ class AppContainer(val app: Application) {
 
     val translator = LyricsTranslator(app)
     val aiEngine = AiLyricsEngine(app, scope)
-    val lyrics = LyricsRepository(app, db.lyrics(), music, translator, aiEngine, settings, scope)
+    val lyrics = LyricsRepository(app, db.lyrics(), music, library, translator, aiEngine, settings, scope)
 
     val player = PlayerConnection(app, scope, music, artwork)
 

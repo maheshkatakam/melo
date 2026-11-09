@@ -41,6 +41,8 @@ Every push to `main` builds a new APK automatically (Actions tab → "Build Melo
 - You can also import an `.lrc` file or paste lyrics
 - Lyrics stored in another language are translated on the phone (one-time ~30 MB language pack per language; Hindi, Telugu, Tamil, Kannada, Marathi, Bengali, Gujarati, Urdu and many more)
 - For songs with no lyrics at all, an on-device AI (OpenAI's Whisper "small" model running through whisper.cpp) listens to the song and writes the lyrics directly in English, with timing. It works for ~99 languages, needs no internet, and takes a few minutes per song. It's best-effort: loud music over the vocals causes mistakes.
+- **Get lyrics for all songs in one tap** (card on the Home screen): works through your whole library in the background, most-played songs first, with progress and a Stop button in the notification. It carries on if you close Melo, picks up again after a restart, and by default only runs while the phone is charging (switch it off on the card). Songs with no singing are skipped next time.
+- Or turn on **Make lyrics as I listen** in Settings so each song you play gets lyrics automatically.
 
 ## Honest limits
 
