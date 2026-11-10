@@ -44,12 +44,12 @@ Every push to `main` builds a new APK automatically (Actions tab → "Build Melo
 - **Get lyrics for all songs in one tap** (card on the Home screen): works through your whole library in the background, most-played songs first, with progress and a Stop button in the notification. It carries on if you close Melo, picks up again after a restart, and by default only runs while the phone is charging (switch it off on the card). Songs with no singing are skipped next time.
 - Or turn on **Make lyrics as I listen** in Settings so each song you play gets lyrics automatically.
 
-**Identify songs around you (needs internet)**
-- Tap **Identify a song** (Home screen, the mic button, the Quick Settings tile, or long-press the Melo icon). Melo listens for 10 seconds and tells you the song, with its cover and Spotify / Apple Music / YouTube links.
-- Uses [AudD](https://audd.io): get a free key at dashboard.audd.io (300 free identifications, then $5/month only if you want more) and paste it in Melo's Settings. The key is stored only on your phone, never in this repo.
-- Or use the free Shazam app: identify there, tap **Share › Save to Melo**.
+**Identify songs around you (free, needs internet)**
+- Tap **Identify a song** (Home screen, the mic button, the Quick Settings tile, or long-press the Melo icon). Melo listens for up to 12 seconds and usually answers within 4–8.
+- Completely free, no account or key: Melo makes an audio fingerprint on the phone and looks it up in Shazam's catalogue (great coverage of Bollywood and South Indian music). Only the fingerprint (a few KB) is sent, never the audio.
+- This uses Shazam's unofficial interface, the same way the open-source [SongRec](https://github.com/marin-m/SongRec) and [ShazamIO](https://github.com/shazamio/ShazamIO) do, so it could break if Shazam changes it. The official route always works too: identify in the Shazam app and tap **Share › Save to Melo**.
 - Everything lands in **Discovered** (Library tab). When a discovered song later shows up in your library, Melo adds it to Favorites, and uses the found cover if the file has no picture.
-- No internet? Melo keeps the recording and identifies it automatically when you're back online.
+- No internet? Melo keeps the fingerprint and identifies the song automatically when you're back online.
 
 ## Honest limits
 
@@ -69,6 +69,12 @@ curl -L -o app/src/main/assets/models/ggml-small-q5_1.bin \
 ```
 
 Release signing uses `signing/melo-release.jks` (encrypted). Its password is the `MELO_KEYSTORE_PASSWORD` repository secret; locally, set `MELO_KEYSTORE_PATH`, `MELO_KEYSTORE_PASSWORD`, `MELO_KEY_ALIAS=melo` and `MELO_KEY_PASSWORD` (same password) in the environment.
+
+## Credits
+
+- Fingerprinting is a Kotlin port of [shazamio-core](https://github.com/shazamio/shazamio-core) (MIT, Copyright (c) 2024 dotX12); see `licenses/shazamio-core-MIT.txt`.
+- On-device lyrics AI: [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) with OpenAI's Whisper model.
+- Font: Poppins (SIL Open Font License).
 
 ## Tech
 

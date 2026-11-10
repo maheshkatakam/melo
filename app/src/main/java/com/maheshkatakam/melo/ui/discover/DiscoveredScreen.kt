@@ -245,14 +245,13 @@ private fun DiscoveryDetailSheet(d: DiscoveryEntity, onDismiss: () -> Unit) {
                             is IdentifyOutcome.Found -> "Found: ${outcome.discovery.title}"
                             IdentifyOutcome.NotFound -> "Still couldn't identify it"
                             IdentifyOutcome.SavedForLater -> "Still offline. Saved for later."
-                            is IdentifyOutcome.NeedsKey -> outcome.message
                             is IdentifyOutcome.Failed -> outcome.message
                             null -> "The recording is no longer available"
                         }
                         Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                         onDismiss()
                     }
-                }) { Text("Try identifying again") }
+                }) { Text(if (d.status == DiscoveryStatus.PENDING) "Identify now" else "Try identifying again") }
             }
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = {

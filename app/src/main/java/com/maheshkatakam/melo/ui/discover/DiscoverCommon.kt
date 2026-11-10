@@ -18,7 +18,6 @@ import com.maheshkatakam.melo.ui.components.GeneratedCover
 import java.io.File
 import java.net.URLEncoder
 
-const val AUDD_DASHBOARD = "https://dashboard.audd.io/"
 private const val SHAZAM_PACKAGE = "com.shazam.android"
 
 fun openUrl(context: Context, url: String) {

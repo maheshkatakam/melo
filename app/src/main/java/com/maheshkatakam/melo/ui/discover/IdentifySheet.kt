@@ -42,6 +42,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -80,15 +81,11 @@ import com.maheshkatakam.melo.ui.theme.Coral
 import com.maheshkatakam.melo.ui.theme.Violet
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
-private const val LISTEN_SECONDS = 10
-
 private sealed interface Stage {
-    data object Setup : Stage
     data object Starting : Stage
-    data class Listening(val secondsLeft: Int) : Stage
+    data class Listening(val progress: Float) : Stage
     data object Identifying : Stage
     data class Done(val outcome: IdentifyOutcome) : Stage
     data class Problem(val message: String, val micDenied: Boolean = false) : Stage
@@ -104,7 +101,7 @@ fun IdentifySheet(onDismiss: () -> Unit, onOpenDiscovered: () -> Unit) {
     val settings by container.settings.settings.collectAsStateWithLifecycle()
     val repo = container.discoveries
 
-    var stage by remember { mutableStateOf<Stage>(if (settings.auddToken.isBlank()) Stage.Setup else Stage.Starting) }
+    var stage by remember { mutableStateOf<Stage>(Stage.Starting) }
     var job by remember { mutableStateOf<Job?>(null) }
     var pausedMusic by remember { mutableStateOf(false) }
 
@@ -116,11 +113,8 @@ fun IdentifySheet(onDismiss: () -> Unit, onOpenDiscovered: () -> Unit) {
                 pausedMusic = true
             }
             try {
-                stage = Stage.Listening(LISTEN_SECONDS)
-                val clip = repo.recorder.record(LISTEN_SECONDS) { left -> stage = Stage.Listening(left) }
-                stage = Stage.Identifying
-                // Runs in the app's scope so the result is saved even if you close this sheet.
-                val outcome = container.scope.async { repo.identify(clip) }.await()
+                stage = Stage.Listening(0f)
+                val outcome = repo.listenAndIdentify { p -> stage = Stage.Listening(p) }
                 stage = Stage.Done(outcome)
             } catch (c: CancellationException) {
                 throw c
@@ -166,15 +160,8 @@ fun IdentifySheet(onDismiss: () -> Unit, onOpenDiscovered: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             when (val s = stage) {
-                Stage.Setup -> SetupContent(
-                    onKeySaved = { key ->
-                        container.settings.setAuddToken(key)
-                        stage = Stage.Starting
-                        start()
-                    },
-                )
-                Stage.Starting -> ListeningContent(LISTEN_SECONDS, starting = true) { onDismiss() }
-                is Stage.Listening -> ListeningContent(s.secondsLeft, starting = false) { onDismiss() }
+                Stage.Starting -> ListeningContent(0f, starting = true) { onDismiss() }
+                is Stage.Listening -> ListeningContent(s.progress, starting = false) { onDismiss() }
                 Stage.Identifying -> {
                     Spacer(Modifier.height(24.dp))
                     CircularProgressIndicator()
@@ -187,10 +174,6 @@ fun IdentifySheet(onDismiss: () -> Unit, onOpenDiscovered: () -> Unit) {
                     autoFavorite = settings.autoFavoriteDiscovered,
                     onAgain = { start() },
                     onOpenDiscovered = onOpenDiscovered,
-                    onOpenSettings = {
-                        onDismiss()
-                        navigator.openSettings()
-                    },
                     onPlay = { song ->
                         container.player.play(listOf(song))
                         onDismiss()
@@ -215,69 +198,7 @@ fun IdentifySheet(onDismiss: () -> Unit, onOpenDiscovered: () -> Unit) {
 }
 
 @Composable
-private fun SetupContent(onKeySaved: (String) -> Unit) {
-    val context = LocalContext.current
-    var key by remember { mutableStateOf("") }
-    Text("Identify songs around you", style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
-    Spacer(Modifier.height(6.dp))
-    Text(
-        "Melo listens for 10 seconds and tells you what's playing, then saves it to your Discovered list. " +
-            "This needs the internet.",
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center,
-    )
-    Spacer(Modifier.height(18.dp))
-    OptionCard(
-        title = "Built into Melo",
-        body = "Uses AudD's song recognition. Your first 300 songs are free; after that it's \$5 a month only if you want more. " +
-            "Get your free key, then paste it here (it stays on this phone).",
-    ) {
-        OutlinedButton(onClick = { openUrl(context, AUDD_DASHBOARD) }) { Text("1. Get a free key") }
-        Spacer(Modifier.height(8.dp))
-        OutlinedTextField(
-            value = key,
-            onValueChange = { key = it.trim() },
-            label = { Text("2. Paste your AudD key") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.height(8.dp))
-        Button(onClick = { onKeySaved(key) }, enabled = key.length >= 8, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Rounded.Mic, null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Save and start listening")
-        }
-    }
-    Spacer(Modifier.height(12.dp))
-    OptionCard(
-        title = "Or use the free Shazam app",
-        body = "Identify the song in Shazam, then tap Share › Save to Melo. It lands in your Discovered list, " +
-            "with its cover, and works the same way.",
-    ) {
-        FilledTonalButton(onClick = { openShazam(context) }, modifier = Modifier.fillMaxWidth()) { Text("Open Shazam") }
-    }
-}
-
-@Composable
-private fun OptionCard(title: String, body: String, content: @Composable () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(18.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Spacer(Modifier.height(4.dp))
-            Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(12.dp))
-            content()
-        }
-    }
-}
-
-@Composable
-private fun ListeningContent(secondsLeft: Int, starting: Boolean, onCancel: () -> Unit) {
+private fun ListeningContent(progress: Float, starting: Boolean, onCancel: () -> Unit) {
     val pulse = rememberInfiniteTransition(label = "pulse")
     val scale by pulse.animateFloat(
         initialValue = 0.92f,
@@ -303,13 +224,21 @@ private fun ListeningContent(secondsLeft: Int, starting: Boolean, onCancel: () -
         }
     }
     Spacer(Modifier.height(12.dp))
-    Text(if (starting) "Getting ready…" else "Listening… $secondsLeft", style = MaterialTheme.typography.titleLarge)
+    Text(if (starting) "Getting ready…" else "Listening…", style = MaterialTheme.typography.titleLarge)
     Text(
         "Hold your phone near the music",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Spacer(Modifier.height(12.dp))
+    Spacer(Modifier.height(14.dp))
+    LinearProgressIndicator(
+        progress = { progress.coerceIn(0f, 1f) },
+        modifier = Modifier
+            .fillMaxWidth(0.6f)
+            .height(4.dp),
+        trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
+    )
+    Spacer(Modifier.height(8.dp))
     TextButton(onClick = onCancel) { Text("Cancel") }
 }
 
@@ -320,7 +249,6 @@ private fun ResultContent(
     autoFavorite: Boolean,
     onAgain: () -> Unit,
     onOpenDiscovered: () -> Unit,
-    onOpenSettings: () -> Unit,
     onPlay: (com.maheshkatakam.melo.data.Song) -> Unit,
 ) {
     val context = LocalContext.current
@@ -375,24 +303,22 @@ private fun ResultContent(
             }
         }
         IdentifyOutcome.NotFound -> {
-            Message(Icons.Rounded.MusicOff, "Couldn't recognise this one", "Try again closer to the speaker, ideally during the chorus. Very new or rare songs sometimes aren't in the database yet.")
+            Message(
+                Icons.Rounded.MusicOff,
+                "Couldn't recognise this one",
+                "Try again closer to the speaker, ideally during the chorus. It's saved in Discovered so you can retry later; very new or rare songs sometimes take a while to appear.",
+            )
             Spacer(Modifier.height(16.dp))
             Button(onClick = onAgain) { Text("Try again") }
             TextButton(onClick = { openShazam(context) }) { Text("Try Shazam instead") }
         }
         IdentifyOutcome.SavedForLater -> {
-            Message(Icons.Rounded.CloudOff, "Saved for later", "You're offline, so Melo kept the recording. It will identify the song automatically when you're back online.")
+            Message(Icons.Rounded.CloudOff, "Saved for later", "You're offline, so Melo kept the song's fingerprint (not the audio). It will identify it automatically when you're back online.")
             Spacer(Modifier.height(16.dp))
             Row {
                 TextButton(onClick = onAgain) { Text("Record another") }
                 TextButton(onClick = onOpenDiscovered) { Text("All discovered") }
             }
-        }
-        is IdentifyOutcome.NeedsKey -> {
-            Message(Icons.Rounded.Mic, "Recognition key needed", outcome.message)
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = onOpenSettings) { Text("Open settings") }
-            TextButton(onClick = { openShazam(context) }) { Text("Use Shazam instead") }
         }
         is IdentifyOutcome.Failed -> {
             Message(Icons.Rounded.MusicOff, "Something went wrong", outcome.message)

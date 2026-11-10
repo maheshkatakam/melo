@@ -15,6 +15,8 @@ import com.maheshkatakam.melo.data.db.DiscoveryDao
 import com.maheshkatakam.melo.data.db.DiscoveryEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -23,10 +25,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 
 object DiscoveryStatus {
-    const val PENDING = "pending"      // recorded offline, waiting for internet
+    const val PENDING = "pending"      // fingerprinted offline, waiting for internet
     const val FOUND = "found"
     const val NOT_FOUND = "not_found"
 }
@@ -35,13 +38,13 @@ sealed interface IdentifyOutcome {
     data class Found(val discovery: DiscoveryEntity, val inLibrary: Song?) : IdentifyOutcome
     data object NotFound : IdentifyOutcome
     data object SavedForLater : IdentifyOutcome
-    data class NeedsKey(val message: String) : IdentifyOutcome
     data class Failed(val message: String) : IdentifyOutcome
 }
 
 /**
- * Songs you identified with Melo or shared from Shazam. Recordings made offline are kept
- * and identified automatically when the phone is back online. When a discovered song later
+ * Songs you identified with Melo or shared from Shazam. Identification is free: Melo
+ * fingerprints the audio on the phone and looks it up in Shazam's catalogue. Fingerprints
+ * made offline are kept (a few KB, no audio) and looked up when the phone is back online. When a discovered song later
  * appears in your library, Melo adds it to Favorites and, if it has no picture, uses the
  * cover found during identification.
  */
@@ -54,7 +57,7 @@ class DiscoveryRepository(
     private val settings: SettingsRepository,
     private val scope: CoroutineScope,
 ) {
-    val recorder = ClipRecorder(context)
+    private val dir = File(context.filesDir, "discover").apply { mkdirs() }
     private val pendingLock = Mutex()
     private val matchLock = Mutex()
 
@@ -80,54 +83,97 @@ class DiscoveryRepository(
         scope.launch { identifyPending() }
     }
 
-    fun hasKey(): Boolean = settings.settings.value.auddToken.isNotBlank()
-
     fun isOnline(): Boolean {
         val cm = context.getSystemService(ConnectivityManager::class.java) ?: return false
         val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
-        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
-    /** Sends a fresh recording off for identification (or keeps it for later when offline). */
-    suspend fun identify(clip: File): IdentifyOutcome {
-        val token = settings.settings.value.auddToken
-        if (token.isBlank()) {
-            clip.delete()
-            return IdentifyOutcome.NeedsKey("Add your free AudD key in Settings first.")
-        }
-        if (!isOnline()) {
-            dao.insert(blank(DiscoveryStatus.PENDING, clip.absolutePath))
-            return IdentifyOutcome.SavedForLater
-        }
-        return when (val result = AudDClient.recognize(clip, token)) {
-            is RecognitionResult.Found -> {
-                clip.delete()
-                val id = dao.insert(blank(DiscoveryStatus.FOUND, null))
-                val saved = fill(id, result.song)
-                val match = SongMatcher.find(music.songs.value, saved.title, saved.artist)
-                if (match != null) linkToLibrary(saved, match)
-                IdentifyOutcome.Found(dao.get(id) ?: saved, match)
-            }
-            RecognitionResult.NotFound -> {
-                clip.delete()
-                IdentifyOutcome.NotFound
-            }
-            is RecognitionResult.KeyProblem -> {
-                // Keep the recording so it can be identified once the key is fixed.
-                dao.insert(blank(DiscoveryStatus.PENDING, clip.absolutePath))
-                IdentifyOutcome.NeedsKey(result.message)
-            }
-            is RecognitionResult.Failed -> {
+    /**
+     * Listens through the microphone and identifies the song. Asks Shazam after 4, 8 and
+     * 12 seconds of audio and stops at the first match, so popular songs come back fast.
+     * [onListening] reports how much of the 12 seconds has been recorded (0..1).
+     */
+    suspend fun listenAndIdentify(onListening: (Float) -> Unit): IdentifyOutcome = coroutineScope {
+        val recorder = MicRecorder()
+        val window = ShazamSignature.WINDOW_SECONDS
+        val recording = launch { recorder.record(window) }
+        try {
+            var lastFailure: RecognitionResult.Failed? = null
+            for (checkpoint in intArrayOf(4, 8, window)) {
+                while (recorder.seconds < checkpoint && !recorder.finished) {
+                    onListening(recorder.seconds / window)
+                    delay(100)
+                }
+                if (recording.isCancelled) break
+                onListening(recorder.seconds / window)
                 if (!isOnline()) {
-                    dao.insert(blank(DiscoveryStatus.PENDING, clip.absolutePath))
-                    IdentifyOutcome.SavedForLater
-                } else {
-                    clip.delete()
-                    IdentifyOutcome.Failed(result.message)
+                    if (checkpoint < window) continue
+                    break
+                }
+                val fp = withContext(Dispatchers.Default) { ShazamSignature.fingerprint(recorder.snapshot()) }
+                if (fp.peakCount < 20) continue // too quiet so far
+                when (val result = ShazamClient.recognize(fp.toDataUri(), fp.durationMs)) {
+                    is RecognitionResult.Found -> {
+                        recording.cancel()
+                        return@coroutineScope saveFound(result.song)
+                    }
+                    RecognitionResult.NotFound -> lastFailure = null
+                    is RecognitionResult.Failed -> lastFailure = result
                 }
             }
+            recording.join()
+            val samples = recorder.snapshot()
+            if (samples.size < ShazamSignature.SAMPLE_RATE * 3) {
+                return@coroutineScope IdentifyOutcome.Failed("The microphone didn't pick anything up.")
+            }
+            val fp = withContext(Dispatchers.Default) { ShazamSignature.fingerprint(samples) }
+            if (fp.peakCount < 20) {
+                return@coroutineScope IdentifyOutcome.Failed("It was too quiet to hear the song. Hold your phone closer to the music.")
+            }
+            val failure = lastFailure
+            when {
+                !isOnline() || failure?.offline == true -> {
+                    savePending(fp)
+                    IdentifyOutcome.SavedForLater
+                }
+                failure != null -> IdentifyOutcome.Failed(failure.message)
+                else -> {
+                    // Keep the fingerprint so it can be tried again later (Shazam's catalogue grows).
+                    dao.insert(blank(DiscoveryStatus.NOT_FOUND, writeSignature(fp)))
+                    IdentifyOutcome.NotFound
+                }
+            }
+        } finally {
+            recording.cancel()
         }
+    }
+
+    private suspend fun saveFound(song: Recognized): IdentifyOutcome {
+        val id = dao.insert(blank(DiscoveryStatus.FOUND, null))
+        val saved = fill(id, song)
+        val match = SongMatcher.find(music.songs.value, saved.title, saved.artist)
+        if (match != null) linkToLibrary(saved, match)
+        return IdentifyOutcome.Found(dao.get(id) ?: saved, match)
+    }
+
+    private suspend fun savePending(fp: ShazamSignature.Fingerprint) {
+        dao.insert(blank(DiscoveryStatus.PENDING, writeSignature(fp)))
+    }
+
+    /** The fingerprint as a small JSON file: no audio is ever stored. */
+    private suspend fun writeSignature(fp: ShazamSignature.Fingerprint): String = withContext(Dispatchers.IO) {
+        val file = File(dir, "sig_${System.currentTimeMillis()}.json")
+        file.writeText(JSONObject().put("uri", fp.toDataUri()).put("samplems", fp.durationMs).toString())
+        file.absolutePath
+    }
+
+    private suspend fun readSignature(path: String?): Pair<String, Int>? = withContext(Dispatchers.IO) {
+        val file = path?.let { File(it) }?.takeIf { it.exists() } ?: return@withContext null
+        runCatching {
+            val json = JSONObject(file.readText())
+            json.getString("uri") to json.getInt("samplems")
+        }.getOrNull()
     }
 
     /** Text shared from Shazam ("I used Shazam to discover X by Y. https://…") or any app. */
@@ -150,11 +196,26 @@ class DiscoveryRepository(
         }
     }
 
+    /** Looks up a saved fingerprint again (waiting for internet, or not found last time). */
     suspend fun retry(id: Long): IdentifyOutcome? {
         val d = dao.get(id) ?: return null
-        val clip = d.clipPath?.let { File(it) }?.takeIf { it.exists() } ?: return null
-        dao.delete(id)
-        return identify(clip)
+        val (uri, ms) = readSignature(d.clipPath) ?: return null
+        if (!isOnline()) return IdentifyOutcome.SavedForLater
+        return when (val result = ShazamClient.recognize(uri, ms)) {
+            is RecognitionResult.Found -> {
+                d.clipPath?.let { File(it).delete() }
+                dao.update(d.copy(status = DiscoveryStatus.FOUND, clipPath = null))
+                val saved = fill(d.id, result.song)
+                val match = SongMatcher.find(music.songs.value, saved.title, saved.artist)
+                if (match != null) linkToLibrary(saved, match)
+                IdentifyOutcome.Found(dao.get(d.id) ?: saved, match)
+            }
+            RecognitionResult.NotFound -> {
+                dao.update(d.copy(status = DiscoveryStatus.NOT_FOUND))
+                IdentifyOutcome.NotFound
+            }
+            is RecognitionResult.Failed -> IdentifyOutcome.Failed(result.message)
+        }
     }
 
     fun remove(id: Long) {
@@ -168,24 +229,21 @@ class DiscoveryRepository(
     }
 
     suspend fun identifyPending() {
-        if (!hasKey() || !isOnline()) return
+        if (!isOnline()) return
         pendingLock.withLock {
             for (d in dao.pending()) {
-                val clip = d.clipPath?.let { File(it) }
-                if (clip == null || !clip.exists()) {
+                val signature = readSignature(d.clipPath)
+                if (signature == null) {
                     dao.update(d.copy(status = DiscoveryStatus.NOT_FOUND, clipPath = null))
                     continue
                 }
-                when (val result = AudDClient.recognize(clip, settings.settings.value.auddToken)) {
+                when (val result = ShazamClient.recognize(signature.first, signature.second)) {
                     is RecognitionResult.Found -> {
-                        clip.delete()
+                        d.clipPath?.let { File(it).delete() }
                         dao.update(d.copy(status = DiscoveryStatus.FOUND, clipPath = null))
                         fill(d.id, result.song)
                     }
-                    RecognitionResult.NotFound -> {
-                        dao.update(d.copy(status = DiscoveryStatus.NOT_FOUND))
-                    }
-                    is RecognitionResult.KeyProblem -> return
+                    RecognitionResult.NotFound -> dao.update(d.copy(status = DiscoveryStatus.NOT_FOUND))
                     is RecognitionResult.Failed -> return // try again next time we're online
                 }
             }
@@ -215,7 +273,7 @@ class DiscoveryRepository(
         val current = dao.get(id) ?: blank(DiscoveryStatus.FOUND, null).copy(id = id)
         var artPath = current.artworkPath
         if (artPath == null && song.artworkUrl != null) {
-            val file = File(recorder.dir, "art_$id.jpg")
+            val file = File(dir, "art_$id.jpg")
             if (downloadTo(song.artworkUrl, file)) artPath = file.absolutePath
         }
         val updated = current.copy(
