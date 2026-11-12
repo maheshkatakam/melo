@@ -26,10 +26,17 @@ Every push to `main` builds a new APK automatically (Actions tab → "Build Melo
 - Open audio files from a file manager with "Open with Melo"
 
 **Mood sound modes**
-- Normal, Happy, Party, Workout, Chill, Romantic, Mellow, Focus and Sleep
-- Each sets the equalizer, bass boost, surround and loudness (Happy and Party lean on bass)
+- Normal, Happy, Party, Workout, Chill, Romantic, Mellow, Focus, Sleep and Spatial
+- Each mood is tuned for how you'd actually listen in it. Party: deep kick, clean and loud, extra wide, every song evened out. Focus: vocals step back, steady and quieter. Sleep: dark, soft, nothing sudden. And so on; the app describes each one.
+- Runs on Melo's own sound engine (tone, bass punch, stereo width, spatial, room, warmth, volume evening, and a limiter that prevents distortion), so moods sound the same on every phone. Normal leaves the audio completely untouched.
+- **Spatial** gives a "sound around you" feel on headphones. It's Melo's own effect, not Dolby Atmos.
 - Fine-tune any mood and save your own custom moods
 - Melo remembers which songs you play in each mood and builds a "mood mix" you can play
+
+**Real quality check**
+- The player shows each song's format (for example "MP3 · 320 kbps · 44.1 kHz").
+- Song details → **Check real quality** listens to the song and tells you what it really is. Many downloads labelled 320 kbps were converted up from 128 kbps; Melo spots that from the missing high frequencies.
+- Melo can't turn a normal file into lossless or Atmos (nothing can; the detail isn't in the file). It plays every file at its own quality.
 
 **Pictures**
 - Uses the cover stored inside the song file, or `cover.jpg` / `folder.jpg` next to it

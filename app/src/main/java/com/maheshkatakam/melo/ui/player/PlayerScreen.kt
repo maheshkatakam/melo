@@ -54,6 +54,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -75,7 +76,9 @@ import com.maheshkatakam.melo.ui.LocalContainer
 import com.maheshkatakam.melo.ui.LocalNavigator
 import com.maheshkatakam.melo.ui.LocalSongMenu
 import com.maheshkatakam.melo.ui.components.EmptyState
+import com.maheshkatakam.melo.quality.SongQuality
 import com.maheshkatakam.melo.ui.components.SongArtwork
+import com.maheshkatakam.melo.ui.components.SongInfoDialog
 import com.maheshkatakam.melo.ui.components.formatDuration
 import com.maheshkatakam.melo.ui.components.rememberArtColor
 
@@ -94,6 +97,7 @@ fun PlayerScreen() {
     val sleep by container.sleepTimer.state.collectAsStateWithLifecycle()
     var showLyrics by rememberSaveable { mutableStateOf(false) }
     var sheet by remember { mutableStateOf<PlayerSheet?>(null) }
+    var showInfo by remember { mutableStateOf(false) }
 
     val song = now.song
     val artColor = if (settings.artworkColors) rememberArtColor(song) else null
@@ -184,6 +188,25 @@ fun PlayerScreen() {
                                 song?.let { navigator.openArtist(com.maheshkatakam.melo.data.MusicRepository.primaryArtist(it.artist)) }
                             },
                         )
+                        if (song != null) {
+                            val quality by produceState<SongQuality?>(container.quality.cached(song.id), song.id) {
+                                if (value == null) value = container.quality.describe(song)
+                            }
+                            quality?.let { q ->
+                                Text(
+                                    q.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    modifier = Modifier
+                                        .padding(top = 2.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable { showInfo = true }
+                                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
                     }
                     if (song != null) {
                         val fav = song.id in favorites
@@ -274,6 +297,8 @@ fun PlayerScreen() {
             }
         }
     }
+
+    if (showInfo && song != null) SongInfoDialog(song) { showInfo = false }
 
     when (sheet) {
         PlayerSheet.QUEUE -> QueueSheet(onDismiss = { sheet = null })

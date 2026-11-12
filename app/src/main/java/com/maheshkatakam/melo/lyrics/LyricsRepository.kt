@@ -270,6 +270,16 @@ class LyricsRepository(
         }
     }
 
+    /** Called when Melo comes to the screen: shows the progress notification if work is under way. */
+    fun onAppForeground() {
+        if (_aiJob.value != null || _aiQueue.value.isNotEmpty()) LyricsService.start(context)
+    }
+
+    /** After file access is granted: look again for .lrc files next to songs that had no lyrics. */
+    fun forgetMisses() {
+        scope.launch { dao.deleteMisses() }
+    }
+
     fun cancelAi(songId: Long) {
         _aiQueue.update { it - songId }
         priority.update { it - songId }

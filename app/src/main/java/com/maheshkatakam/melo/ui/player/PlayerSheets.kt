@@ -196,7 +196,7 @@ fun MoodSheet(onDismiss: () -> Unit, onOpenSound: () -> Unit) {
         Column(Modifier.padding(horizontal = 20.dp).navigationBarsPadding()) {
             Text("How are you feeling?", style = MaterialTheme.typography.titleLarge)
             Text(
-                "Each mood tunes the sound. Melo also learns which songs you play in each mood.",
+                "Each mood reshapes the sound to fit how you feel. Melo also learns which songs you play in each mood.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -211,7 +211,13 @@ fun MoodSheet(onDismiss: () -> Unit, onOpenSound: () -> Unit) {
                     MoodTile(mood, selected = mood.id == current.id) { container.effects.setMood(mood.id) }
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
+            Text(
+                current.name + ": " + current.details,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 FilledTonalButton(
                     onClick = {

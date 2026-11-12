@@ -52,7 +52,7 @@ object AudioDecoder {
         var sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
         var channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
         var pcmFloat = false
-        val mono = FloatBuilder(((durationUs / 1_000_000.0) * sampleRate).toInt().coerceIn(1 shl 16, 1 shl 26))
+        val mono = FloatBuilder((minOf(durationUs / 1_000_000.0, MAX_SECONDS.toDouble()) * sampleRate).toInt().coerceIn(1 shl 16, 1 shl 25))
         val maxSamples = MAX_SECONDS.toLong() * 48_000L
 
         val info = MediaCodec.BufferInfo()

@@ -106,6 +106,9 @@ interface LyricsDao {
     @Query("DELETE FROM lyrics WHERE songId = :songId")
     suspend fun delete(songId: Long)
 
+    @Query("DELETE FROM lyrics WHERE source = 'none'")
+    suspend fun deleteMisses()
+
     @Query("SELECT songId FROM lyrics WHERE source = 'ai' OR english IS NOT NULL")
     suspend fun songsWithEnglish(): List<Long>
 

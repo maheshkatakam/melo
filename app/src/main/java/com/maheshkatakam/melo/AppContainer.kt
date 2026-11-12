@@ -17,6 +17,7 @@ import com.maheshkatakam.melo.lyrics.LyricsRepository
 import com.maheshkatakam.melo.lyrics.LyricsTranslator
 import com.maheshkatakam.melo.lyrics.ai.AiLyricsEngine
 import com.maheshkatakam.melo.playback.PlayerConnection
+import com.maheshkatakam.melo.quality.QualityChecker
 import com.maheshkatakam.melo.playback.SleepTimer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,8 +32,9 @@ class AppContainer(val app: Application) {
     val music = MusicRepository(app, scope, settings)
     val library = LibraryRepository(db, music, scope)
     val importer = SongImporter(app, music)
+    val quality = QualityChecker(app)
     val artwork = ArtworkRepository(app)
-    val effects = AudioEffectsController(app, scope, settings, db.customMoods())
+    val effects = AudioEffectsController(scope, settings, db.customMoods())
     val sleepTimer = SleepTimer()
 
     val translator = LyricsTranslator(app)

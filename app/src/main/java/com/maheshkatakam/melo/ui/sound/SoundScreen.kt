@@ -64,7 +64,6 @@ fun SoundScreen() {
     val effects = container.effects
     val moods by effects.moods.collectAsStateWithLifecycle()
     val current by effects.currentMood.collectAsStateWithLifecycle()
-    val support by effects.support.collectAsStateWithLifecycle()
     val settings by container.settings.settings.collectAsStateWithLifecycle()
 
     var editing by remember(current.id, current.profile) { mutableStateOf(current.profile) }
@@ -113,7 +112,7 @@ fun SoundScreen() {
             }
             item {
                 Text(
-                    current.description,
+                    current.details,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
@@ -121,10 +120,7 @@ fun SoundScreen() {
             }
 
             item {
-                Card("Equalizer") {
-                    if (!support.equalizer) {
-                        Note("Your phone didn't allow Melo's equalizer. Bass and surround may still work.")
-                    }
+                Card("Tone") {
                     SoundProfile.BAND_LABELS.forEachIndexed { i, label ->
                         LabeledSlider(
                             title = SoundProfile.BAND_NAMES[i],
@@ -133,37 +129,83 @@ fun SoundScreen() {
                             value = editing.bands[i],
                             range = -SoundProfile.MAX_DB..SoundProfile.MAX_DB,
                             onChange = { v ->
-                                editing = editing.copy(bands = editing.bands.toMutableList().also { it[i] = (v * 2).toInt() / 2f })
+                                editing = editing.copy(bands = editing.bands.toMutableList().also { it[i] = Math.round(v * 2) / 2f })
                             },
+                        )
+                    }
+                    LabeledSlider(
+                        title = "Bass punch",
+                        detail = "Kick and sub",
+                        valueText = String.format(Locale.US, "+%.1f dB", editing.bass),
+                        value = editing.bass,
+                        range = 0f..10f,
+                        onChange = { editing = editing.copy(bass = Math.round(it * 2) / 2f) },
+                    )
+                }
+            }
+            item {
+                Card("Space") {
+                    LabeledSlider(
+                        title = "Stereo width",
+                        detail = "100% = as recorded",
+                        valueText = "${Math.round(editing.width * 100)}%",
+                        value = editing.width,
+                        range = 0.5f..1.6f,
+                        onChange = { editing = editing.copy(width = Math.round(it * 20) / 20f) },
+                    )
+                    LabeledSlider(
+                        title = "Spatial",
+                        detail = "Sound around you, best with headphones",
+                        valueText = "${Math.round(editing.spatial * 100)}%",
+                        value = editing.spatial,
+                        range = 0f..1f,
+                        onChange = { editing = editing.copy(spatial = Math.round(it * 20) / 20f) },
+                    )
+                    LabeledSlider(
+                        title = "Room",
+                        detail = "Ambience around the music",
+                        valueText = "${Math.round(editing.reverb * 100)}%",
+                        value = editing.reverb,
+                        range = 0f..0.6f,
+                        onChange = { editing = editing.copy(reverb = Math.round(it * 50) / 50f) },
+                    )
+                    if (editing.reverb > 0f) {
+                        LabeledSlider(
+                            title = "Room size",
+                            detail = "Small room to big hall",
+                            valueText = "${Math.round(editing.room * 100)}%",
+                            value = editing.room,
+                            range = 0f..1f,
+                            onChange = { editing = editing.copy(room = Math.round(it * 20) / 20f) },
                         )
                     }
                 }
             }
             item {
-                Card("Effects") {
+                Card("Feel") {
                     LabeledSlider(
-                        title = "Bass boost",
-                        detail = if (support.bass) null else "Not supported on this phone",
-                        valueText = "${editing.bass / 10}%",
-                        value = editing.bass.toFloat(),
-                        range = 0f..1000f,
-                        onChange = { editing = editing.copy(bass = it.toInt()) },
+                        title = "Warmth",
+                        detail = "Soft, analogue-style richness",
+                        valueText = "${Math.round(editing.warmth * 100)}%",
+                        value = editing.warmth,
+                        range = 0f..1f,
+                        onChange = { editing = editing.copy(warmth = Math.round(it * 20) / 20f) },
                     )
                     LabeledSlider(
-                        title = "Surround",
-                        detail = if (support.virtualizer) "Best with headphones" else "Not supported on this phone",
-                        valueText = "${editing.virtualizer / 10}%",
-                        value = editing.virtualizer.toFloat(),
-                        range = 0f..1000f,
-                        onChange = { editing = editing.copy(virtualizer = it.toInt()) },
+                        title = "Even out volume",
+                        detail = "Quiet parts up, loud parts down",
+                        valueText = "${Math.round(editing.levelling * 100)}%",
+                        value = editing.levelling,
+                        range = 0f..1f,
+                        onChange = { editing = editing.copy(levelling = Math.round(it * 20) / 20f) },
                     )
                     LabeledSlider(
                         title = "Loudness",
-                        detail = if (support.loudness) "Extra volume for quiet songs" else "Not supported on this phone",
-                        valueText = String.format(Locale.US, "+%.1f dB", editing.loudness / 100f),
-                        value = editing.loudness.toFloat(),
-                        range = 0f..1000f,
-                        onChange = { editing = editing.copy(loudness = it.toInt()) },
+                        detail = "Protected from distortion",
+                        valueText = String.format(Locale.US, "%+.1f dB", editing.gainDb),
+                        value = editing.gainDb,
+                        range = -8f..6f,
+                        onChange = { editing = editing.copy(gainDb = Math.round(it * 2) / 2f) },
                     )
                 }
             }
@@ -247,8 +289,9 @@ fun SoundScreen() {
             }
             item {
                 Note(
-                    "Sound modes use your phone's built-in audio effects. If your phone or Bluetooth headphones " +
-                        "have their own equalizer (like Dolby), it can change how these sound.",
+                    "Moods run on Melo's own sound engine, so they sound the same on every phone and headphone. " +
+                        "Normal leaves the audio completely untouched. If your phone has its own effects (like Dolby), " +
+                        "they are added on top; turn them off for the cleanest result.",
                     Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
             }

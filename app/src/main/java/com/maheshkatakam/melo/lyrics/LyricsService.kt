@@ -16,6 +16,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.maheshkatakam.melo.MainActivity
+import com.maheshkatakam.melo.MeloApp
 import com.maheshkatakam.melo.R
 import com.maheshkatakam.melo.appContainer
 import com.maheshkatakam.melo.lyrics.ai.AiStage
@@ -194,6 +195,9 @@ class LyricsService : Service() {
 
         /** Safe to call from anywhere; if Android won't allow it right now, work still runs in-app. */
         fun start(context: Context) {
+            // Android refuses (and can crash the app) if this starts while Melo is off screen.
+            // The work itself still runs; the notification appears next time Melo is opened.
+            if (!MeloApp.isInForeground) return
             try {
                 ContextCompat.startForegroundService(context, Intent(context, LyricsService::class.java))
             } catch (t: Throwable) {

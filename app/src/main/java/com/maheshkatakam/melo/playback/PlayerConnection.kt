@@ -166,10 +166,9 @@ class PlayerConnection(
 
     fun play(songs: List<Song>, startIndex: Int = 0, shuffle: Boolean = false) = withController { c ->
         if (songs.isEmpty()) return@withController
-        val list = if (shuffle) songs.shuffled() else songs
-        val start = if (shuffle) 0 else startIndex.coerceIn(0, songs.lastIndex)
-        c.shuffleModeEnabled = false
-        c.setMediaItems(list.map { it.toMediaItem(artwork.customArtUri(it.id)) }, start, 0L)
+        val start = if (shuffle) songs.indices.random() else startIndex.coerceIn(0, songs.lastIndex)
+        c.shuffleModeEnabled = shuffle
+        c.setMediaItems(songs.map { it.toMediaItem(artwork.customArtUri(it.id)) }, start, 0L)
         c.prepare()
         c.play()
     }

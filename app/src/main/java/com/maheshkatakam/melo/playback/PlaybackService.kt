@@ -1,6 +1,7 @@
 package com.maheshkatakam.melo.playback
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.annotation.OptIn
@@ -12,7 +13,11 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -51,7 +56,17 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
         val c = container
 
-        player = ExoPlayer.Builder(this)
+        // All audio runs through Melo's own sound engine (moods), so it sounds the same on every phone.
+        val renderers = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean,
+            ): AudioSink = DefaultAudioSink.Builder(context)
+                .setAudioProcessors(arrayOf<AudioProcessor>(c.effects.processor))
+                .build()
+        }
+        player = ExoPlayer.Builder(this, renderers)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -63,7 +78,6 @@ class PlaybackService : MediaSessionService() {
             .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
         player.addListener(listener)
-        c.effects.attach(player.audioSessionId)
 
         val openApp = PendingIntent.getActivity(
             this,
@@ -112,7 +126,6 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         saveQueue()
         scope.cancel()
-        container.effects.release()
         session?.run {
             player.release()
             release()
@@ -204,10 +217,6 @@ class PlaybackService : MediaSessionService() {
     }
 
     private val listener = object : Player.Listener {
-        override fun onAudioSessionIdChanged(audioSessionId: Int) {
-            container.effects.attach(audioSessionId)
-        }
-
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             consecutiveErrors = 0
             schedulePlayRecord(mediaItem)

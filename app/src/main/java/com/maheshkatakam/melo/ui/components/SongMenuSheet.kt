@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -194,16 +195,22 @@ private fun MenuItem(icon: ImageVector, label: String, onClick: () -> Unit) {
 
 @Composable
 fun SongInfoDialog(song: Song, onDismiss: () -> Unit) {
+    val container = LocalContainer.current
+    val scope = rememberCoroutineScope()
     val sizeMb = song.sizeBytes / (1024.0 * 1024.0)
-    val kbps = if (song.durationMs > 0) (song.sizeBytes * 8 / song.durationMs) else 0
+    var quality by remember(song.id) { mutableStateOf(container.quality.cached(song.id)) }
+    var checking by remember(song.id) { mutableStateOf(false) }
+    LaunchedEffect(song.id) {
+        if (quality == null) quality = container.quality.describe(song)
+    }
     val rows = listOf(
         "Title" to song.title,
         "Artist" to song.artist,
         "Album" to song.album,
         "Year" to (if (song.year > 0) song.year.toString() else "—"),
         "Length" to formatDuration(song.durationMs),
-        "Format" to (song.mimeType ?: "—"),
-        "Size" to String.format(Locale.US, "%.1f MB · ~%d kbps", sizeMb, kbps),
+        "Quality on the label" to (quality?.label ?: (song.mimeType ?: "—")),
+        "Size" to String.format(Locale.US, "%.1f MB", sizeMb),
         "File" to (song.path ?: song.uri.toString()),
     )
     AlertDialog(
@@ -214,6 +221,35 @@ fun SongInfoDialog(song: Song, onDismiss: () -> Unit) {
                 rows.forEach { (k, v) ->
                     Text(k, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(v, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 10.dp))
+                }
+                Text("Real quality", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val verdict = quality?.verdict
+                when {
+                    verdict != null -> Text(verdict, style = MaterialTheme.typography.bodyMedium)
+                    checking -> Text("Listening to the song…", style = MaterialTheme.typography.bodyMedium)
+                    else -> {
+                        Text(
+                            "Labels can lie: many downloads say 320 kbps but were converted from 128. Melo can check what's really in the sound.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        TextButton(onClick = {
+                            checking = true
+                            scope.launch {
+                                val result = container.quality.analyze(song)
+                                quality = result
+                                checking = false
+                            }
+                        }) { Text("Check real quality") }
+                    }
+                }
+                if (verdict != null) {
+                    Text(
+                        "An estimate from the highest frequencies present in the middle of the song.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
                 }
             }
         },

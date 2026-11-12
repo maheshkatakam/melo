@@ -41,6 +41,11 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
+    override fun onStart() {
+        super.onStart()
+        appContainer.lyrics.onAppForeground()
+    }
+
     override fun onResume() {
         super.onResume()
         appContainer.music.onPermissionChanged()

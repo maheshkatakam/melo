@@ -83,7 +83,15 @@ fun SettingsScreen() {
     var showAllLanguages by remember { mutableStateOf(false) }
     var allFilesGranted by remember { mutableStateOf(hasAllFilesAccess()) }
 
-    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { allFilesGranted = hasAllFilesAccess() }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        val now = hasAllFilesAccess()
+        if (now && !allFilesGranted) {
+            // Newly allowed: songs that had no cover or lyrics get checked again.
+            container.artwork.forgetMisses()
+            container.lyrics.forgetMisses()
+        }
+        allFilesGranted = now
+    }
     LaunchedEffect(Unit) { container.translator.refreshDownloaded() }
 
     val languages = remember(showAllLanguages) {

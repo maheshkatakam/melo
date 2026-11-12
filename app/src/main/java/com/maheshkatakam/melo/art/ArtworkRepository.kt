@@ -60,6 +60,12 @@ class ArtworkRepository(private val context: Context) {
         bump(songId)
     }
 
+    /** After file access is granted: look again for folder covers for songs that had no picture. */
+    fun forgetMisses() {
+        thumbDir.listFiles { f -> f.name.endsWith(".none") }?.forEach { it.delete() }
+        _revision.value = _revision.value + 1
+    }
+
     private fun bump(songId: Long) {
         versions[songId] = version(songId) + 1
         thumbDir.listFiles { f -> f.name.startsWith("${songId}_") }?.forEach { it.delete() }
