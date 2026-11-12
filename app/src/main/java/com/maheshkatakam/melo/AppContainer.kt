@@ -33,8 +33,8 @@ class AppContainer(val app: Application) {
     val library = LibraryRepository(db, music, scope)
     val importer = SongImporter(app, music)
     val quality = QualityChecker(app)
+    val effects = AudioEffectsController(app, scope, settings, db.customMoods(), quality, music)
     val artwork = ArtworkRepository(app)
-    val effects = AudioEffectsController(scope, settings, db.customMoods())
     val sleepTimer = SleepTimer()
 
     val translator = LyricsTranslator(app)

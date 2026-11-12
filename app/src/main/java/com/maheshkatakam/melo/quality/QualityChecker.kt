@@ -55,6 +55,18 @@ class QualityChecker(private val context: Context) {
 
     private val cache = ConcurrentHashMap<Long, SongQuality>()
 
+    /** Analysis results are kept between runs, so each song is only listened to once. */
+    private val saved = context.getSharedPreferences("melo_quality", Context.MODE_PRIVATE)
+
+    private fun key(song: Song) = "${song.id}_${song.dateModifiedSec}"
+
+    private fun loadSaved(song: Song): QualityAnalyzer.Result? {
+        val parts = saved.getString(key(song), null)?.split('|') ?: return null
+        val cutoff = parts.getOrNull(0)?.toIntOrNull() ?: return null
+        val grade = QualityAnalyzer.Grade.entries.getOrNull(parts.getOrNull(1)?.toIntOrNull() ?: -1) ?: return null
+        return QualityAnalyzer.Result(cutoff, grade, parts.getOrNull(2)?.toFloatOrNull())
+    }
+
     fun cached(songId: Long): SongQuality? = cache[songId]
 
     /** Quick: format facts only (no audio analysis). */
@@ -75,6 +87,7 @@ class QualityChecker(private val context: Context) {
                 AudioFormat.ENCODING_PCM_8BIT -> 8
                 else -> format?.intOrNull("bits-per-sample") ?: if (lossless) 16 else null
             }
+            val known = loadSaved(song)
             SongQuality(
                 format = formatName(mime, song.path),
                 lossless = lossless,
@@ -82,8 +95,8 @@ class QualityChecker(private val context: Context) {
                 sampleRateHz = rate,
                 channels = channels,
                 bitDepth = depth,
-                real = null,
-            )
+                real = known,
+            ).also { if (known != null) cache[song.id] = it }
         } catch (t: Throwable) {
             SongQuality(formatName(song.mimeType.orEmpty(), song.path), false, 0, 0, 2, null, null)
         } finally {
@@ -102,7 +115,10 @@ class QualityChecker(private val context: Context) {
             }.getOrNull()
         }
         val full = base.copy(real = result)
-        if (result != null) cache[song.id] = full
+        if (result != null) {
+            cache[song.id] = full
+            saved.edit().putString(key(song), "${result.cutoffHz}|${result.grade.ordinal}|${result.restoreGainDb ?: ""}").apply()
+        }
         return full
     }
 

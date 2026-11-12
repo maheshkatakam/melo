@@ -21,6 +21,12 @@ object QualityAnalyzer {
         val cutoffHz: Int,
         /** What that corresponds to, e.g. "about 128 kbps". */
         val grade: Grade,
+        /**
+         * For rebuilding the missing treble ([com.maheshkatakam.melo.audio.TrebleRestorer]):
+         * how loud the rebuilt band should be relative to the band it is copied from, in dB,
+         * so the spectrum carries on at its natural slope. Null when nothing is missing.
+         */
+        val restoreGainDb: Float? = null,
     )
 
     enum class Grade(val label: String, val approxKbps: Int) {
@@ -89,7 +95,19 @@ object QualityAnalyzer {
             hz < 19_900 -> Grade.HIGH
             else -> Grade.FULL
         }
-        return Result(hz, grade)
+        var restoreGain: Float? = null
+        if (hz in 6000..19_000) {
+            val width = minOf(nyquist - hz, hz * 0.5, 7000.0)
+            if (width >= 1500) {
+                val scale = 10 * log10(frames.toDouble())
+                val low = bandDb(power, hz - width, hz - width + 1000) - scale
+                val top = bandDb(power, hz - 1500.0, hz - 400.0) - scale
+                // The copied band starts as loud as its bottom edge; bring it down to where the top edge left off.
+                // A few dB under that on purpose: slightly too little treble is harmless, too much is harsh.
+                restoreGain = (top - low - 7.0).coerceIn(-30.0, -6.0).toFloat()
+            }
+        }
+        return Result(hz, grade, restoreGain)
     }
 
     private fun fft(re: DoubleArray, im: DoubleArray) {

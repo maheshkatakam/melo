@@ -1,0 +1,9 @@
+HRTF measurements of a KEMAR dummy-head microphone
+Bill Gardner and Keith Martin, MIT Media Lab, 1994.
+https://sound.media.mit.edu/resources/KEMAR.html
+
+"This data is Copyright 1994 by the MIT Media Laboratory. It is provided free with no
+restrictions on use, provided the authors are cited when the data is used in any research
+or commercial application."
+
+Melo uses a subset of the "compact" set (app/src/main/assets/hrtf/kemar.bin) for its 3D sound.

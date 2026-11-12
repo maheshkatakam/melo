@@ -34,6 +34,15 @@ data class Settings(
     val autoAiLyrics: Boolean = false,
     val aiOnlyWhileCharging: Boolean = true,
     val autoFavoriteDiscovered: Boolean = true,
+    /** 3D sound on headphones. */
+    val immersive: Boolean = false,
+    val immersiveStrength: Float = 0.6f,
+    /** Rebuild the treble that low-bitrate files are missing. */
+    val restoreTreble: Boolean = true,
+    /** Hand 5.1 to the phone's own spatial audio (head tracking on supported earbuds). */
+    val systemSpatial: Boolean = false,
+    /** Play 24-bit files untouched at full precision (no moods or 3D for those songs). */
+    val hiResDirect: Boolean = false,
     val useDiscoveredCovers: Boolean = true,
     val preferOriginalLyrics: Boolean = false,
     val skipSilence: Boolean = false,
@@ -58,6 +67,11 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val aiOnlyCharging = booleanPreferencesKey("ai_only_while_charging")
         val aiQueue = stringPreferencesKey("ai_queue")
         val autoFavDiscovered = booleanPreferencesKey("auto_favorite_discovered")
+        val immersive = booleanPreferencesKey("immersive")
+        val immersiveStrength = floatPreferencesKey("immersive_strength")
+        val restoreTreble = booleanPreferencesKey("restore_treble")
+        val systemSpatial = booleanPreferencesKey("system_spatial")
+        val hiResDirect = booleanPreferencesKey("hires_direct")
         val discoveredCovers = booleanPreferencesKey("use_discovered_covers")
         val preferOriginal = booleanPreferencesKey("prefer_original_lyrics")
         val skipSilence = booleanPreferencesKey("skip_silence")
@@ -81,6 +95,11 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
                 autoAiLyrics = p[Keys.autoAi] ?: false,
                 aiOnlyWhileCharging = p[Keys.aiOnlyCharging] ?: true,
                 autoFavoriteDiscovered = p[Keys.autoFavDiscovered] ?: true,
+                immersive = p[Keys.immersive] ?: false,
+                immersiveStrength = p[Keys.immersiveStrength] ?: 0.6f,
+                restoreTreble = p[Keys.restoreTreble] ?: true,
+                systemSpatial = p[Keys.systemSpatial] ?: false,
+                hiResDirect = p[Keys.hiResDirect] ?: false,
                 useDiscoveredCovers = p[Keys.discoveredCovers] ?: true,
                 preferOriginalLyrics = p[Keys.preferOriginal] ?: false,
                 skipSilence = p[Keys.skipSilence] ?: false,
@@ -105,6 +124,11 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
     fun setSongSort(sort: SongSort) = edit { it[Keys.songSort] = sort.name }
     fun setAutoAiLyrics(on: Boolean) = edit { it[Keys.autoAi] = on }
     fun setAiOnlyWhileCharging(on: Boolean) = edit { it[Keys.aiOnlyCharging] = on }
+    fun setImmersive(on: Boolean) = edit { it[Keys.immersive] = on }
+    fun setImmersiveStrength(v: Float) = edit { it[Keys.immersiveStrength] = v }
+    fun setRestoreTreble(on: Boolean) = edit { it[Keys.restoreTreble] = on }
+    fun setSystemSpatial(on: Boolean) = edit { it[Keys.systemSpatial] = on }
+    fun setHiResDirect(on: Boolean) = edit { it[Keys.hiResDirect] = on }
     fun setAutoFavoriteDiscovered(on: Boolean) = edit { it[Keys.autoFavDiscovered] = on }
     fun setUseDiscoveredCovers(on: Boolean) = edit { it[Keys.discoveredCovers] = on }
 

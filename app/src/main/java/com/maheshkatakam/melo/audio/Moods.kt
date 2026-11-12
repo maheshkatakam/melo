@@ -37,8 +37,8 @@ data class Mood(
 object Moods {
     val Normal = Mood(
         id = "normal", name = "Normal",
-        description = "Untouched, exactly as the file sounds",
-        details = "No processing at all. The audio goes to your headphones bit for bit.",
+        description = "No mood shaping",
+        details = "No mood shaping. With 3D sound and treble rebuild also off, the audio passes through bit for bit.",
         icon = Icons.Rounded.GraphicEq,
         colors = listOf(Color(0xFF64748B), Color(0xFF334155)),
         profile = SoundProfile.FLAT,
@@ -119,7 +119,8 @@ object Moods {
         profile = MoodProfiles.SPATIAL,
     )
 
-    val builtIn: List<Mood> = listOf(Normal, Happy, Party, Workout, Chill, Romantic, Mellow, Focus, Sleep, Spatial)
+    /** 3D sound is its own switch now (it works together with any mood), so Spatial is no longer listed here. */
+    val builtIn: List<Mood> = listOf(Normal, Happy, Party, Workout, Chill, Romantic, Mellow, Focus, Sleep)
 
     /** Icons a custom mood can use. */
     val customIcons: Map<String, ImageVector> = linkedMapOf(

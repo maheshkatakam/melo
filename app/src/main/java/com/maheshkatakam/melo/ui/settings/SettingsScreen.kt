@@ -314,7 +314,7 @@ fun SettingsScreen() {
                     Text(
                         "Your music, pictures, lyrics and the AI all stay on this phone. The internet is only used to identify songs " +
                             "(only a fingerprint is sent) and to download translation packs.\n\n" +
-                            "Song fingerprinting adapted from shazamio-core (MIT, © 2024 dotX12). Lyrics AI: whisper.cpp (MIT).",
+                            "Song fingerprinting adapted from shazamio-core (MIT, © 2024 dotX12). Lyrics AI: whisper.cpp (MIT). 3D sound uses KEMAR HRTF measurements by Bill Gardner and Keith Martin, MIT Media Lab.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

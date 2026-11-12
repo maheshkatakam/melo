@@ -3,6 +3,9 @@ package com.maheshkatakam.melo.playback
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
@@ -34,9 +37,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 
 @OptIn(UnstableApi::class)
@@ -56,6 +61,7 @@ class PlaybackService : MediaSessionService() {
         super.onCreate()
         val c = container
 
+        val hiResDirect = runBlocking { withTimeoutOrNull(800) { c.settings.awaitLoaded().hiResDirect } } ?: false
         // All audio runs through Melo's own sound engine (moods), so it sounds the same on every phone.
         val renderers = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
@@ -64,6 +70,8 @@ class PlaybackService : MediaSessionService() {
                 enableAudioTrackPlaybackParams: Boolean,
             ): AudioSink = DefaultAudioSink.Builder(context)
                 .setAudioProcessors(arrayOf<AudioProcessor>(c.effects.processor))
+                // Hi-res direct: 24-bit and float files skip Melo's processing and keep full precision.
+                .setEnableFloatOutput(hiResDirect)
                 .build()
         }
         player = ExoPlayer.Builder(this, renderers)
@@ -105,6 +113,21 @@ class PlaybackService : MediaSessionService() {
             }
         }
         scope.launch { c.sleepTimer.state.collect { handleSleepTimer(it) } }
+
+        // 3D sound only runs on headphones, so keep track of what is connected.
+        c.effects.refreshHeadphones()
+        getSystemService(AudioManager::class.java)?.registerAudioDeviceCallback(deviceCallback, null)
+        // Switching between Melo's own 3D and the phone's spatial audio changes the number of
+        // output channels, which needs the audio output to be reopened.
+        scope.launch {
+            c.effects.surroundOutput.drop(1).collect {
+                delay(150)
+                if (player.mediaItemCount > 0 && player.playbackState != Player.STATE_IDLE) {
+                    player.stop()
+                    player.prepare()
+                }
+            }
+        }
         scope.launch {
             while (isActive) {
                 delay(15_000)
@@ -125,6 +148,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         saveQueue()
+        runCatching { getSystemService(AudioManager::class.java)?.unregisterAudioDeviceCallback(deviceCallback) }
         scope.cancel()
         session?.run {
             player.release()
@@ -216,9 +240,15 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    private val deviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = container.effects.refreshHeadphones()
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = container.effects.refreshHeadphones()
+    }
+
     private val listener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             consecutiveErrors = 0
+            container.effects.onSongChanged(MediaIds.songId(mediaItem?.mediaId))
             schedulePlayRecord(mediaItem)
             saveQueueSoon()
         }

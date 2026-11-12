@@ -65,6 +65,8 @@ fun SoundScreen() {
     val moods by effects.moods.collectAsStateWithLifecycle()
     val current by effects.currentMood.collectAsStateWithLifecycle()
     val settings by container.settings.settings.collectAsStateWithLifecycle()
+    val headphones by effects.headphones.collectAsStateWithLifecycle()
+    val restore by effects.restore.collectAsStateWithLifecycle()
 
     var editing by remember(current.id, current.profile) { mutableStateOf(current.profile) }
     val dirty = editing != current.profile
@@ -120,6 +122,58 @@ fun SoundScreen() {
             }
 
             item {
+                Card("3D sound") {
+                    ToggleRow(
+                        "3D sound for headphones",
+                        when {
+                            !settings.immersive -> "Places the music around you: a wide stage in front, ambience at your sides, behind and above"
+                            headphones || (settings.systemSpatial && effects.phoneSpatialSupported) -> "On. Works with any mood"
+                            else -> "On, waiting for headphones. It doesn't work on speakers"
+                        },
+                        settings.immersive,
+                    ) { container.settings.setImmersive(it) }
+                    if (settings.immersive) {
+                        var strength by remember(settings.immersiveStrength) { mutableFloatStateOf(settings.immersiveStrength) }
+                        LabeledSlider(
+                            title = "How far it surrounds you",
+                            detail = null,
+                            valueText = "${Math.round(strength * 100)}%",
+                            value = strength,
+                            range = 0f..1f,
+                            onChange = { strength = it },
+                            onFinished = { container.settings.setImmersiveStrength(strength) },
+                        )
+                        if (effects.phoneSpatialSupported) {
+                            ToggleRow(
+                                "Use this phone's spatial audio (experimental)",
+                                "Melo turns the song into 5.1 surround and your phone renders it. This is what allows head tracking " +
+                                    "on earbuds that support it. Turn it off if the sound goes wrong.",
+                                settings.systemSpatial,
+                            ) { container.settings.setSystemSpatial(it) }
+                        }
+                    }
+                    Note("Melo's own effect, made from the stereo song as it plays. It is not Dolby Atmos. Real 5.1 and 7.1 files are played as speakers around you.")
+                }
+            }
+            item {
+                Card("Quality") {
+                    ToggleRow(
+                        "Rebuild missing treble",
+                        restore?.let {
+                            "This song's sound stops at " + String.format(Locale.US, "%.1f kHz", it.cutoffHz / 1000f) +
+                                "; Melo is filling in the top. A best guess, not the original"
+                        } ?: "Low-quality files (like 128 kbps) have their highest notes cut off. Melo fills them back in as a best guess. Good files are left alone",
+                        settings.restoreTreble,
+                    ) { container.settings.setRestoreTreble(it) }
+                    ToggleRow(
+                        "Hi-res direct",
+                        "24-bit files skip all of Melo's processing and play at full precision, so moods and 3D don't apply to them. " +
+                            "Takes effect after you close and reopen Melo",
+                        settings.hiResDirect,
+                    ) { container.settings.setHiResDirect(it) }
+                }
+            }
+            item {
                 Card("Tone") {
                     SoundProfile.BAND_LABELS.forEachIndexed { i, label ->
                         LabeledSlider(
@@ -154,8 +208,8 @@ fun SoundScreen() {
                         onChange = { editing = editing.copy(width = Math.round(it * 20) / 20f) },
                     )
                     LabeledSlider(
-                        title = "Spatial",
-                        detail = "Sound around you, best with headphones",
+                        title = "Depth",
+                        detail = "A light widening that also works on speakers",
                         valueText = "${Math.round(editing.spatial * 100)}%",
                         value = editing.spatial,
                         range = 0f..1f,
@@ -420,4 +474,22 @@ private fun SaveMoodDialog(
             }
         },
     )
+}
+
+@Composable
+private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable { onChange(!checked) }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
 }

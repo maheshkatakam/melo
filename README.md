@@ -26,12 +26,19 @@ Every push to `main` builds a new APK automatically (Actions tab → "Build Melo
 - Open audio files from a file manager with "Open with Melo"
 
 **Mood sound modes**
-- Normal, Happy, Party, Workout, Chill, Romantic, Mellow, Focus, Sleep and Spatial
+- Normal, Happy, Party, Workout, Chill, Romantic, Mellow, Focus and Sleep
 - Each mood is tuned for how you'd actually listen in it. Party: deep kick, clean and loud, extra wide, every song evened out. Focus: vocals step back, steady and quieter. Sleep: dark, soft, nothing sudden. And so on; the app describes each one.
 - Runs on Melo's own sound engine (tone, bass punch, stereo width, spatial, room, warmth, volume evening, and a limiter that prevents distortion), so moods sound the same on every phone. Normal leaves the audio completely untouched.
-- **Spatial** gives a "sound around you" feel on headphones. It's Melo's own effect, not Dolby Atmos.
 - Fine-tune any mood and save your own custom moods
 - Melo remembers which songs you play in each mood and builds a "mood mix" you can play
+
+**3D sound and quality (all free, all on the phone)**
+- **3D sound for headphones** (the 3D button on the player): Melo re-stages any stereo song as it plays. In every slice of time and frequency it separates distinct sounds from ambience, places the sounds on a wide stage in front of you and the ambience at your sides, behind and above, and renders it through measured ear responses (MIT KEMAR) so it seems to come from outside your head. Works on any headphones, with any mood. It switches itself off on speakers.
+- **Real surround files**: 5.1 and 7.1 files (FLAC, Opus, AAC…) play as virtual speakers around you. That's the free, legal alternative to Atmos files.
+- **Phone spatial audio (experimental)**: on phones that have it, Melo can hand the song over as 5.1 so the phone does the 3D part, which is what enables head tracking on supported earbuds.
+- **Rebuild missing treble**: low-bitrate files have everything above ~16 kHz cut off. Melo measures each song and fills the top back in by copying the band below it upward (spectral band replication), in time with the music. A best guess, not the original.
+- **Hi-res direct**: optionally play 24-bit files with no processing at full precision.
+- None of this is Dolby Atmos or true lossless; nothing can create those from a normal file. It's the closest honest equivalent.
 
 **Real quality check**
 - The player shows each song's format (for example "MP3 · 320 kbps · 44.1 kHz").
@@ -80,6 +87,7 @@ Release signing uses `signing/melo-release.jks` (encrypted). Its password is the
 ## Credits
 
 - Fingerprinting is a Kotlin port of [shazamio-core](https://github.com/shazamio/shazamio-core) (MIT, Copyright (c) 2024 dotX12); see `licenses/shazamio-core-MIT.txt`.
+- 3D sound uses the MIT KEMAR HRTF measurements (Bill Gardner and Keith Martin, MIT Media Lab, 1994); see `licenses/KEMAR-HRTF.txt`.
 - On-device lyrics AI: [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) with OpenAI's Whisper model.
 - Font: Poppins (SIL Open Font License).
 

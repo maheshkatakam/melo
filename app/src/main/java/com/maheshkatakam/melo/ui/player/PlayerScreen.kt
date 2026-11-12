@@ -2,6 +2,7 @@
 
 package com.maheshkatakam.melo.ui.player
 
+import android.widget.Toast
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.SurroundSound
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -65,6 +67,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -95,6 +98,8 @@ fun PlayerScreen() {
     val mood by container.effects.currentMood.collectAsStateWithLifecycle()
     val favorites by container.library.favoriteIds.collectAsStateWithLifecycle()
     val sleep by container.sleepTimer.state.collectAsStateWithLifecycle()
+    val headphones by container.effects.headphones.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     var showLyrics by rememberSaveable { mutableStateOf(false) }
     var sheet by remember { mutableStateOf<PlayerSheet?>(null) }
     var showInfo by remember { mutableStateOf(false) }
@@ -280,6 +285,20 @@ fun PlayerScreen() {
                 ) {
                     MoodChip(mood, onClick = { sheet = PlayerSheet.MOOD }, modifier = Modifier.weight(1f))
                     Spacer(Modifier.width(8.dp))
+                    ToggleIcon(
+                        selected = settings.immersive,
+                        accent = accent,
+                        onClick = {
+                            val on = !settings.immersive
+                            container.settings.setImmersive(on)
+                            val message = when {
+                                !on -> "3D sound off"
+                                headphones || (settings.systemSpatial && container.effects.phoneSpatialSupported) -> "3D sound on"
+                                else -> "3D sound will start when you connect headphones"
+                            }
+                            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                        },
+                    ) { Icon(Icons.Rounded.SurroundSound, "3D sound") }
                     ToggleIcon(
                         selected = showLyrics,
                         accent = accent,

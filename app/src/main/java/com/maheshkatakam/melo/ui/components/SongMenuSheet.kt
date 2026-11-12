@@ -243,6 +243,14 @@ fun SongInfoDialog(song: Song, onDismiss: () -> Unit) {
                         }) { Text("Check real quality") }
                     }
                 }
+                if (quality?.real?.restoreGainDb != null && container.settings.settings.value.restoreTreble) {
+                    Text(
+                        "While this song plays, Melo rebuilds the missing treble as a best guess (Sound → Quality).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
                 if (verdict != null) {
                     Text(
                         "An estimate from the highest frequencies present in the middle of the song.",
