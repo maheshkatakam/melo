@@ -86,6 +86,7 @@ jobs:
           retention-days: 30
 
       - name: Publish GitHub release
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -94,3 +95,23 @@ jobs:
             --title "Melo 1.0.${{ github.run_number }}" \
             --notes "Download the APK below on your phone and open it to install or update Melo." \
             --latest
+
+      - name: Mirror the optional "accurate lyrics" model (one-time)
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACCURATE_MODEL: ggml-large-v3-turbo-q5_0.bin
+          ACCURATE_SHA256: 394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2
+        run: |
+          if gh release view ai-models --json assets -q '.assets[].name' 2>/dev/null | grep -qx "$ACCURATE_MODEL"; then
+            echo "Already mirrored."
+            exit 0
+          fi
+          curl -fL --retry 4 --retry-delay 5 -o "$ACCURATE_MODEL" "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$ACCURATE_MODEL"
+          echo "$ACCURATE_SHA256  $ACCURATE_MODEL" | sha256sum -c -
+          if ! gh release view ai-models > /dev/null 2>&1; then
+            gh release create ai-models --title "Lyrics AI model (optional download)" --latest=false \
+              --notes "Melo downloads this file itself when you choose Settings › Lyrics › Accurate model. You don't need to download it here. Whisper large-v3-turbo (MIT licence), via whisper.cpp."
+          fi
+          gh release upload ai-models "$ACCURATE_MODEL" --clobber

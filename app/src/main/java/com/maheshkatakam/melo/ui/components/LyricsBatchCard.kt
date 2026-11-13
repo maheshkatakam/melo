@@ -107,7 +107,7 @@ fun LyricsBatchCard(modifier: Modifier = Modifier, showWhenDone: Boolean = false
                             when {
                                 current != null -> "Now: ${current.title} · ${current.overallPercent}%" +
                                     if (queue.isNotEmpty()) " · ${queue.size} more" else ""
-                                waiting -> "Paused until you plug in your charger · ${queue.size} left"
+                                waiting -> "AI paused until you plug in your charger · ${queue.size} left"
                                 else -> "Starting…"
                             },
                             style = MaterialTheme.typography.bodyMedium,
@@ -130,8 +130,8 @@ fun LyricsBatchCard(modifier: Modifier = Modifier, showWhenDone: Boolean = false
                 )
                 else -> {
                     Text(
-                        "Melo listens to each song on your phone and writes the lyrics in English, " +
-                            "most-played songs first. It takes a few minutes per song, so a big library is an overnight job.",
+                        "Melo looks up the real lyrics online first (free), then the on-device AI listens to the rest " +
+                            "and writes their lyrics, most-played songs first. The AI takes a few minutes per song, so a big library is an overnight job.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

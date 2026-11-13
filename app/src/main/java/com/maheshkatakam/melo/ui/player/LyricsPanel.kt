@@ -32,7 +32,9 @@ import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -72,9 +74,12 @@ import com.maheshkatakam.melo.lyrics.Lyrics
 import com.maheshkatakam.melo.lyrics.LyricsSource
 import com.maheshkatakam.melo.lyrics.LrcParser
 import com.maheshkatakam.melo.lyrics.ai.AiStage
+import com.maheshkatakam.melo.lyrics.ai.ModelState
 import com.maheshkatakam.melo.lyrics.isEnglish
 import com.maheshkatakam.melo.lyrics.languageName
 import com.maheshkatakam.melo.ui.LocalContainer
+import com.maheshkatakam.melo.lyrics.ai.SongLanguages
+import com.maheshkatakam.melo.ui.components.SongLanguageDialog
 import com.maheshkatakam.melo.ui.components.TextInputDialog
 import kotlinx.coroutines.launch
 
@@ -91,6 +96,7 @@ fun LyricsPanel(song: Song, position: Long, accent: Color, modifier: Modifier = 
     val settings by container.settings.settings.collectAsStateWithLifecycle()
     var showOriginal by rememberSaveable(song.id) { mutableStateOf(settings.preferOriginalLyrics) }
     var pasting by remember { mutableStateOf(false) }
+    var pickingLanguage by remember { mutableStateOf(false) }
 
     LaunchedEffect(song.id) { repo.ensureScanned(song) }
 
@@ -104,7 +110,19 @@ fun LyricsPanel(song: Song, position: Long, accent: Color, modifier: Modifier = 
     }
     val importLrc = { importLauncher.launch(arrayOf("*/*")) }
     val startAi = { repo.requestAi(song) }
+    val startAiOnly = { repo.requestAi(song, useOnline = false) }
 
+    if (pickingLanguage) {
+        SongLanguageDialog(
+            current = repo.pickedLanguage(song.id),
+            yourLanguages = settings.songLanguages,
+            onDismiss = { pickingLanguage = false },
+            onPick = { code ->
+                pickingLanguage = false
+                repo.requestAi(song, language = code)
+            },
+        )
+    }
     if (pasting) {
         TextInputDialog(
             title = "Paste lyrics",
@@ -140,6 +158,7 @@ fun LyricsPanel(song: Song, position: Long, accent: Color, modifier: Modifier = 
                 aiReason = container.aiEngine.unavailableReason,
                 accent = accent,
                 onAi = startAi,
+                onPickLanguage = { pickingLanguage = true },
                 onCancelQueue = { repo.cancelAi(song.id) },
                 onImport = importLrc,
                 onPaste = { pasting = true },
@@ -175,7 +194,9 @@ fun LyricsPanel(song: Song, position: Long, accent: Color, modifier: Modifier = 
                         LyricsMenu(
                             hasAi = e.source == LyricsSource.AI,
                             aiSupported = container.aiEngine.isSupported,
-                            onAi = startAi,
+                            onAi = startAiOnly,
+                            onPickLanguage = { pickingLanguage = true },
+                            onFindOnline = { repo.findOnline(song) },
                             onImport = importLrc,
                             onPaste = { pasting = true },
                             onRescan = { scope.launch { repo.rescan(song) } },
@@ -199,8 +220,11 @@ fun LyricsPanel(song: Song, position: Long, accent: Color, modifier: Modifier = 
                             aiSupported = container.aiEngine.isSupported,
                             accent = accent,
                             onDownload = { code?.let { repo.downloadPackAndTranslate(song.id, it) } },
-                            onAi = startAi,
+                            onAi = startAiOnly,
                         )
+                    }
+                    if (e.source == LyricsSource.AI && !container.aiEngine.usesAccurateModel()) {
+                        AccurateModelHint(accent, afterLyrics = true)
                     }
                     LyricsLines(
                         lyrics = lines,
@@ -216,7 +240,12 @@ fun LyricsPanel(song: Song, position: Long, accent: Color, modifier: Modifier = 
 }
 
 private fun sourceLabel(source: String, language: String?, hasEnglish: Boolean): String = when {
+    source == LyricsSource.AI && hasEnglish && !isEnglish(language) && language != null ->
+        "Heard as ${SongLanguages.name(language)} by the on-device AI, then translated · may contain mistakes"
     source == LyricsSource.AI -> "Written by on-device AI from the audio · may contain mistakes"
+    source == LyricsSource.ONLINE && hasEnglish && !isEnglish(language) ->
+        "Real lyrics from LRCLIB, translated on your phone from ${languageName(language)}"
+    source == LyricsSource.ONLINE -> "Real lyrics from LRCLIB (lrclib.net), saved on your phone"
     hasEnglish && !isEnglish(language) -> "Translated on your phone from ${languageName(language)}"
     source == LyricsSource.LRC_FILE -> "From the .lrc file next to this song"
     source == LyricsSource.EMBEDDED -> "Stored inside the song file"
@@ -288,6 +317,7 @@ private fun NoLyrics(
     aiReason: String?,
     accent: Color,
     onAi: () -> Unit,
+    onPickLanguage: () -> Unit,
     onCancelQueue: () -> Unit,
     onImport: () -> Unit,
     onPaste: () -> Unit,
@@ -321,10 +351,10 @@ private fun NoLyrics(
             aiReason == null -> {
                 Text(
                     if (aiFailed) {
-                        "It may be an instrumental, or the vocals are hard to pick out. You can try again."
+                        "It may be an instrumental, or the vocals are hard to pick out. Try again, telling it the song's language."
                     } else {
-                        "Melo can listen to this song on your phone and write the lyrics in English, " +
-                            "even if it's sung in another language. It takes a few minutes and you can keep listening."
+                        "Melo looks for the real lyrics online first (free). If there are none, the on-device AI listens " +
+                            "and writes them down, then translates them to English. It takes a few minutes and you can keep listening."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -339,9 +369,15 @@ private fun NoLyrics(
                     Spacer(Modifier.width(8.dp))
                     Text(if (aiFailed) "Try again" else "Make English lyrics")
                 }
+                TextButton(onClick = onPickLanguage) {
+                    Icon(Icons.Rounded.Language, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Tell it the song's language")
+                }
                 if (!batchRunning) {
                     TextButton(onClick = onAll) { Text("Do all my songs instead") }
                 }
+                AccurateModelHint(accent, afterLyrics = false)
             }
             else -> Text(
                 aiReason,
@@ -375,9 +411,11 @@ private fun NoLyrics(
 @Composable
 private fun AiProgress(job: AiJob, accent: Color, onCancel: () -> Unit) {
     val (label, fraction) = when (job.stage) {
+        AiStage.SEARCHING_ONLINE -> "Looking for the real lyrics online…" to 0.02f
         AiStage.DECODING -> "Reading the song… ${job.percent}%" to job.percent / 100f * 0.15f
         AiStage.LOADING_MODEL -> "Waking up the AI model…" to 0.15f
-        AiStage.LISTENING -> "Listening and writing English lyrics… ${job.percent}%" to (0.15f + job.percent / 100f * 0.85f)
+        AiStage.DETECTING_LANGUAGE -> "Working out the song's language…" to 0.18f
+        AiStage.LISTENING -> "Listening and writing the lyrics… ${job.percent}%" to (0.2f + job.percent / 100f * 0.8f)
     }
     Column(
         Modifier
@@ -406,6 +444,56 @@ private fun AiProgress(job: AiJob, accent: Color, onCancel: () -> Unit) {
             textAlign = TextAlign.Center,
         )
         TextButton(onClick = onCancel) { Text("Cancel") }
+    }
+}
+
+/**
+ * The built-in AI model is poor at Indian-language singing (it wrote junk for a Telugu film song
+ * in tests); the downloadable one got it right. Offer it until it's on the phone.
+ */
+@Composable
+private fun AccurateModelHint(accent: Color, afterLyrics: Boolean) {
+    val container = LocalContainer.current
+    val store = container.aiEngine.models
+    val state by store.state.collectAsStateWithLifecycle()
+    val settings by container.settings.settings.collectAsStateWithLifecycle()
+    if (state == ModelState.Ready && settings.accurateLyricsModel) return
+    if (container.aiEngine.unavailableReason != null) return
+    val sizeMb = store.accurate.sizeBytes / (1024 * 1024)
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.85f),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text(
+                if (afterLyrics) "Lyrics look wrong?" else "Telugu, Hindi, Tamil or another Indian language?",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Get the accurate AI model. It's far better at Indian-language songs than the built-in one. " +
+                    "One-time download of $sizeMb MB (use Wi-Fi), then it works offline.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            when (val st = state) {
+                is ModelState.Downloading -> Text(
+                    if (st.waitingForNetwork) "Waiting for internet…" else "Downloading… ${(st.fraction * 100).toInt()}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = accent,
+                )
+                ModelState.Checking -> Text("Checking the download…", style = MaterialTheme.typography.bodySmall)
+                ModelState.Ready -> TextButton(onClick = { container.settings.setAccurateLyricsModel(true) }) { Text("Use it") }
+                else -> Button(
+                    onClick = { store.download() },
+                    colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.White),
+                ) { Text("Download ($sizeMb MB)") }
+            }
+        }
     }
 }
 
@@ -475,6 +563,8 @@ private fun LyricsMenu(
     hasAi: Boolean,
     aiSupported: Boolean,
     onAi: () -> Unit,
+    onPickLanguage: () -> Unit,
+    onFindOnline: () -> Unit,
     onImport: () -> Unit,
     onPaste: () -> Unit,
     onRescan: () -> Unit,
@@ -493,7 +583,23 @@ private fun LyricsMenu(
                         onAi()
                     },
                 )
+                DropdownMenuItem(
+                    text = { Text(if (hasAi) "Wrong language? Redo in…" else "AI lyrics in a language you choose") },
+                    leadingIcon = { Icon(Icons.Rounded.Language, null) },
+                    onClick = {
+                        open = false
+                        onPickLanguage()
+                    },
+                )
             }
+            DropdownMenuItem(
+                text = { Text("Find the real lyrics online") },
+                leadingIcon = { Icon(Icons.Rounded.Search, null) },
+                onClick = {
+                    open = false
+                    onFindOnline()
+                },
+            )
             DropdownMenuItem(
                 text = { Text("Import .lrc file") },
                 leadingIcon = { Icon(Icons.Rounded.Description, null) },

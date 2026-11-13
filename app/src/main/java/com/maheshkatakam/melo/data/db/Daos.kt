@@ -115,6 +115,9 @@ interface LyricsDao {
     @Query("SELECT COUNT(*) FROM lyrics WHERE source = 'ai'")
     fun observeAiCount(): Flow<Int>
 
+    @Query("SELECT * FROM lyrics WHERE english IS NULL AND original IS NOT NULL AND language = :language")
+    suspend fun untranslated(language: String): List<LyricsEntity>
+
     @Query("SELECT songId, source, (english IS NOT NULL) AS hasEnglish FROM lyrics")
     fun observeStatus(): Flow<List<LyricsStatus>>
 

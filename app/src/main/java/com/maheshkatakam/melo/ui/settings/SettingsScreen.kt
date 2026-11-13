@@ -32,6 +32,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
@@ -61,9 +62,10 @@ import com.maheshkatakam.melo.lyrics.languageName
 import com.maheshkatakam.melo.ui.LocalContainer
 import com.maheshkatakam.melo.ui.LocalNavigator
 import com.maheshkatakam.melo.ui.components.BackTopBar
+import com.maheshkatakam.melo.lyrics.ai.ModelState
 import com.maheshkatakam.melo.ui.components.LyricsBatchCard
+import com.maheshkatakam.melo.ui.components.SongLanguageChips
 import com.maheshkatakam.melo.ui.components.songCount
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 private val featuredLanguages = listOf("hi", "te", "ta", "kn", "mr", "bn", "gu", "ur", "es", "ko", "ja", "ar")
@@ -202,12 +204,29 @@ fun SettingsScreen() {
                     val reason = container.aiEngine.unavailableReason
                     Text("On-device AI lyrics", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        reason ?: "Listens to a song and writes the lyrics in English, from any language. " +
+                        reason ?: "Listens to a song, writes down the words in the song's own language, then translates them to English. " +
                             "Runs fully offline. Accuracy depends on how clear the vocals are. $aiCount songs done so far.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     if (reason == null) {
+                        Spacer(Modifier.height(14.dp))
+                        Text("Languages of your songs", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "The AI only chooses among these when it works out a song's language. Keep just the ones you listen to.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        SongLanguageChips(settings.songLanguages) { container.settings.setSongLanguages(it) }
+                        Spacer(Modifier.height(14.dp))
+                        AccurateModelCard(settings.accurateLyricsModel) { container.settings.setAccurateLyricsModel(it) }
+                        SwitchRow(
+                            "Look up the real lyrics online first",
+                            "Free, from LRCLIB (lrclib.net), which has timed lyrics for many Telugu, Tamil and Hindi film songs. " +
+                                "Only the song's title, artist and album are sent. Found lyrics are saved and work offline.",
+                            settings.onlineLyrics,
+                        ) { container.settings.setOnlineLyrics(it) }
                         SwitchRow(
                             "Make lyrics as I listen",
                             "Automatically starts for songs you play that have no English lyrics",
@@ -313,8 +332,9 @@ fun SettingsScreen() {
                     Text("Melo ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall)
                     Text(
                         "Your music, pictures, lyrics and the AI all stay on this phone. The internet is only used to identify songs " +
-                            "(only a fingerprint is sent) and to download translation packs.\n\n" +
-                            "Song fingerprinting adapted from shazamio-core (MIT, © 2024 dotX12). Lyrics AI: whisper.cpp (MIT). 3D sound uses KEMAR HRTF measurements by Bill Gardner and Keith Martin, MIT Media Lab.",
+                            "(only a fingerprint is sent), to look up real lyrics (title and artist only), and to download translation packs " +
+                            "and the optional accurate AI model.\n\n" +
+                            "Song fingerprinting adapted from shazamio-core (MIT, © 2024 dotX12). Lyrics AI: whisper.cpp (MIT) with OpenAI Whisper models (MIT). Online lyrics: LRCLIB. 3D sound uses KEMAR HRTF measurements by Bill Gardner and Keith Martin, MIT Media Lab.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -326,6 +346,63 @@ fun SettingsScreen() {
 
 private fun hasAllFilesAccess(): Boolean =
     if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true
+
+/** Download, use or remove the large "accurate" lyrics model. */
+@Composable
+private fun AccurateModelCard(useIt: Boolean, onUse: (Boolean) -> Unit) {
+    val container = LocalContainer.current
+    val store = container.aiEngine.models
+    val state by store.state.collectAsStateWithLifecycle()
+    val sizeMb = store.accurate.sizeBytes / (1024 * 1024)
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text("Accurate AI model (recommended)", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Much better at Telugu, Hindi, Tamil and other Indian languages than the built-in model, but slower " +
+                    "(a few minutes per song). One-time download of $sizeMb MB, then it works offline.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+            when (val st = state) {
+                ModelState.NotDownloaded -> Button(onClick = { store.download() }) {
+                    Icon(Icons.Rounded.Download, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Download ($sizeMb MB, use Wi-Fi)")
+                }
+                is ModelState.Downloading -> {
+                    LinearProgressIndicator(progress = { st.fraction }, modifier = Modifier.fillMaxWidth())
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            if (st.waitingForNetwork) "Waiting for internet…" else "Downloading… ${(st.fraction * 100).toInt()}%",
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { store.cancelDownload() }) { Text("Cancel") }
+                    }
+                }
+                ModelState.Checking -> Text("Checking the download…", style = MaterialTheme.typography.bodySmall)
+                ModelState.Ready -> {
+                    SwitchRow(
+                        "Use the accurate model",
+                        if (useIt) "On. New AI lyrics use it." else "Off. Using the faster built-in model.",
+                        useIt,
+                        onUse,
+                    )
+                    TextButton(onClick = { store.delete() }) { Text("Remove it (frees $sizeMb MB)") }
+                }
+                is ModelState.Failed -> {
+                    Text(st.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { store.download() }) { Text("Try again") }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun Header(text: String) {

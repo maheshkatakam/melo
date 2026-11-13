@@ -40,9 +40,11 @@ data class AiJob(val songId: Long, val title: String, val stage: AiStage, val pe
     /** Overall progress for this song, 0..100 (reading the file is the first ~15%). */
     val overallPercent: Int
         get() = when (stage) {
+            AiStage.SEARCHING_ONLINE -> 0
             AiStage.DECODING -> percent * 15 / 100
             AiStage.LOADING_MODEL -> 15
-            AiStage.LISTENING -> 15 + percent * 85 / 100
+            AiStage.DETECTING_LANGUAGE -> 18
+            AiStage.LISTENING -> 20 + percent * 80 / 100
         }
 }
 
@@ -50,7 +52,8 @@ data class AiJob(val songId: Long, val title: String, val stage: AiStage, val pe
  * Where lyrics come from, in order:
  *  1. A .lrc file next to the song, or lyrics stored inside the song file
  *  2. Lyrics you import or paste
- *  3. The on-device AI, which listens and writes English lyrics
+ *  3. The real lyrics from the free LRCLIB database, if the phone is online (looked up once)
+ *  4. The on-device AI, which listens and writes the words down
  * Non-English text lyrics are translated on the phone once the language pack is present.
  *
  * AI work runs one song at a time from a queue. Songs you ask for directly (or that are
@@ -86,6 +89,14 @@ class LyricsRepository(
 
     /** Songs the user asked for directly, so failures are worth telling them about. */
     private val notify = MutableStateFlow<Set<Long>>(emptySet())
+
+    /** Songs where you asked for the AI specifically, so the online lookup is skipped. */
+    private val aiOnly = MutableStateFlow<Set<Long>>(emptySet())
+
+    /** Languages picked for individual songs ("this song is in Telugu"). */
+    private val songLanguagePrefs = context.getSharedPreferences("melo_song_languages", Context.MODE_PRIVATE)
+
+    fun pickedLanguage(songId: Long): String? = songLanguagePrefs.getString(songId.toString(), null)
 
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val messages: SharedFlow<String> = _messages.asSharedFlow()
@@ -210,13 +221,21 @@ class LyricsRepository(
 
     // ---- AI queue --------------------------------------------------------------------------
 
-    /** One song, straight to the front of the line. */
-    fun requestAi(song: Song, userInitiated: Boolean = true) {
+    /**
+     * One song, straight to the front of the line.
+     * @param language the song's language if you picked it ("te"), or null to let the AI decide
+     */
+    fun requestAi(song: Song, userInitiated: Boolean = true, language: String? = null, useOnline: Boolean = true) {
+        if (!useOnline || language != null) aiOnly.update { it + song.id }
         if (!engine.isSupported) {
             if (userInitiated) _messages.tryEmit(engine.unavailableReason ?: "AI lyrics aren't available on this phone.")
             return
         }
-        if (song.id == currentSongId) return
+        if (language != null) songLanguagePrefs.edit().putString(song.id.toString(), language).apply()
+        if (song.id == currentSongId) {
+            if (language == null) return
+            currentJob?.cancel() // restart it in the chosen language
+        }
         priority.update { it + song.id }
         if (userInitiated) notify.update { it + song.id }
         _aiQueue.update { queue -> listOf(song.id) + (queue - song.id) }
@@ -233,7 +252,7 @@ class LyricsRepository(
         }
         scope.launch {
             val rows = dao.statusList()
-            val skip = rows.filter { it.hasEnglish || it.source == LyricsSource.AI_FAILED }.map { it.songId }.toSet()
+            val skip = rows.filter { it.hasEnglish || it.source in DONE_SOURCES }.map { it.songId }.toSet()
             val plays = library.playCounts.value
             val favorites = library.favoriteIds.value
             val ordered = songs
@@ -304,7 +323,7 @@ class LyricsRepository(
         music.loadedOnce.first { it }
         if (!engine.isSupported) return
         val rows = dao.statusList()
-        val skip = rows.filter { it.hasEnglish || it.source == LyricsSource.AI_FAILED }.map { it.songId }.toSet()
+        val skip = rows.filter { it.hasEnglish || it.source in DONE_SOURCES }.map { it.songId }.toSet()
         val ids = saved.filter { it !in skip && music.song(it) != null }
         if (ids.isEmpty()) {
             persistQueue()
@@ -326,6 +345,9 @@ class LyricsRepository(
                 val urgent = priority.value
                 val urgentNext = queue.firstOrNull { it in urgent }
                 if (urgentNext == null && settings.settings.value.aiOnlyWhileCharging && !isCharging()) {
+                    // The AI waits for the charger, but looking up real lyrics online is quick
+                    // and light, so that carries on.
+                    if (lookUpNextOnline(queue)) continue
                     _waitingForCharger.value = true
                     delay(15_000)
                     continue
@@ -351,28 +373,74 @@ class LyricsRepository(
         }
     }
 
+    /**
+     * Looks up one queued song online (while the AI waits for the charger). Returns false when
+     * there's nothing left to look up or the phone is offline.
+     */
+    private suspend fun lookUpNextOnline(queue: List<Long>): Boolean {
+        if (!settings.settings.value.onlineLyrics || !translator.isOnline()) return false
+        val id = queue.firstOrNull { it !in aiOnly.value } ?: return false
+        aiOnly.update { it + id } // looked up once; the AI takes it from here if nothing is found
+        val song = music.song(id) ?: return true
+        ensureScanned(song)
+        if (dao.get(id)?.english != null) {
+            _aiQueue.update { it - id }
+            persistQueue()
+            return true
+        }
+        _aiJob.value = AiJob(id, song.title, AiStage.SEARCHING_ONLINE, 0)
+        try {
+            val found = findOnlineSafely(song)
+            if (found != null && storeOriginal(id, found.text, LyricsSource.ONLINE)) {
+                _aiQueue.update { it - id }
+                priority.update { it - id }
+                notify.update { it - id }
+                persistQueue()
+                dao.get(id)?.let { translateWhenPossible(it, tellUser = false) }
+            }
+        } finally {
+            _aiJob.value = null
+        }
+        delay(300) // be polite to the free service
+        return true
+    }
+
     private suspend fun process(song: Song, force: Boolean, tellUser: Boolean) {
         // Stored or translatable lyrics may turn up first; no need for the AI then.
         ensureScanned(song)
         val before = dao.get(song.id)
         if (!force && (before?.english != null || before?.source == LyricsSource.AI_FAILED)) return
 
+        val skipOnline = song.id in aiOnly.value
+        aiOnly.update { it - song.id }
+        if (!skipOnline && settings.settings.value.onlineLyrics && translator.isOnline()) {
+            _aiJob.value = AiJob(song.id, song.title, AiStage.SEARCHING_ONLINE, 0)
+            try {
+                val found = findOnlineSafely(song)
+                if (found != null && storeOriginal(song.id, found.text, LyricsSource.ONLINE)) {
+                    dao.get(song.id)?.let { translateWhenPossible(it, tellUser) }
+                    return
+                }
+            } finally {
+                _aiJob.value = null
+            }
+        }
+
         _aiJob.value = AiJob(song.id, song.title, AiStage.DECODING, 0)
         try {
-            val result = engine.transcribe(song) { stage, percent ->
+            val result = engine.transcribe(song, pickedLanguage(song.id), { translator.translatable(it) != null }) { stage, percent ->
                 _aiJob.value = AiJob(song.id, song.title, stage, percent)
             }
-            val existing = dao.get(song.id)
-            dao.upsert(
-                LyricsEntity(
-                    songId = song.id,
-                    source = LyricsSource.AI,
-                    language = if (existing?.original != null) existing.language ?: result.language else result.language,
-                    original = existing?.original,
-                    english = LrcParser.serialize(result.english),
-                    updatedAt = now(),
-                ),
+            val entity = LyricsEntity(
+                songId = song.id,
+                source = LyricsSource.AI,
+                language = result.language,
+                original = result.original?.let { LrcParser.serialize(it) },
+                english = result.english?.let { LrcParser.serialize(it) },
+                updatedAt = now(),
             )
+            dao.upsert(entity)
+            if (entity.english == null) translateWhenPossible(entity, tellUser)
         } catch (c: CancellationException) {
             throw c
         } catch (t: Throwable) {
@@ -390,6 +458,52 @@ class LyricsRepository(
         }
     }
 
+    /**
+     * The AI (and the online database) give the words in the song's own language; English
+     * comes from the on-phone translator. Its language pack (about 30 MB) downloads once, the
+     * first time it's needed, if the phone is online; otherwise the lyrics screen offers it.
+     */
+    private suspend fun translateWhenPossible(entity: LyricsEntity, tellUser: Boolean) {
+        if (entity.english != null) return
+        val code = translator.translatable(entity.language) ?: return
+        if (!translator.isReady(code)) {
+            if (!translator.isOnline() || code in translator.downloading.value) return
+            if (!translator.download(code)) {
+                if (tellUser) _messages.tryEmit("Lyrics are ready in ${languageName(code)}. Connect to the internet once to get the English translation pack.")
+                return
+            }
+            // A new pack: translate every song that was waiting for it.
+            entity.language?.let { lang -> dao.untranslated(lang).forEach { maybeTranslate(it) } }
+            return
+        }
+        dao.get(entity.songId)?.let { maybeTranslate(it) }
+    }
+
+    /** Online lookup that never throws, except to pass on cancellation. */
+    private suspend fun findOnlineSafely(song: Song): FoundLyrics? = try {
+        OnlineLyrics.find(song)
+    } catch (c: CancellationException) {
+        throw c
+    } catch (t: Throwable) {
+        null
+    }
+
+    /** "Find real lyrics online" from the lyrics menu. */
+    fun findOnline(song: Song) {
+        scope.launch {
+            if (!translator.isOnline()) {
+                _messages.tryEmit("Connect to the internet to look up the lyrics.")
+                return@launch
+            }
+            val found = findOnlineSafely(song)
+            if (found == null || !storeOriginal(song.id, found.text, LyricsSource.ONLINE)) {
+                _messages.tryEmit("Couldn't find the real lyrics for this song online.")
+                return@launch
+            }
+            dao.get(song.id)?.let { translateWhenPossible(it, tellUser = true) }
+        }
+    }
+
     fun isCharging(): Boolean {
         val battery = runCatching {
             context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
@@ -398,4 +512,9 @@ class LyricsRepository(
     }
 
     private fun now() = System.currentTimeMillis()
+
+    companion object {
+        /** Songs "Get all lyrics" doesn't need to do again. */
+        private val DONE_SOURCES = setOf(LyricsSource.AI_FAILED, LyricsSource.AI, LyricsSource.ONLINE)
+    }
 }

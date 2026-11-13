@@ -18,6 +18,8 @@ object LyricsSource {
     const val LRC_FILE = "lrc"
     const val IMPORTED = "imported"
     const val PASTED = "pasted"
+    /** Real lyrics found in the free LRCLIB database. */
+    const val ONLINE = "online"
     const val AI = "ai"
     /** The AI ran but heard no singing (instrumental, or the file couldn't be read). */
     const val AI_FAILED = "ai_failed"

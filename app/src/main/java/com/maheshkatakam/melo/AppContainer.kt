@@ -16,6 +16,7 @@ import com.maheshkatakam.melo.discover.DiscoveryRepository
 import com.maheshkatakam.melo.lyrics.LyricsRepository
 import com.maheshkatakam.melo.lyrics.LyricsTranslator
 import com.maheshkatakam.melo.lyrics.ai.AiLyricsEngine
+import com.maheshkatakam.melo.lyrics.ai.AiModelStore
 import com.maheshkatakam.melo.playback.PlayerConnection
 import com.maheshkatakam.melo.quality.QualityChecker
 import com.maheshkatakam.melo.playback.SleepTimer
@@ -38,7 +39,8 @@ class AppContainer(val app: Application) {
     val sleepTimer = SleepTimer()
 
     val translator = LyricsTranslator(app)
-    val aiEngine = AiLyricsEngine(app, scope)
+    val aiModels = AiModelStore(app, scope)
+    val aiEngine = AiLyricsEngine(app, scope, aiModels, settings)
     val lyrics = LyricsRepository(app, db.lyrics(), music, library, translator, aiEngine, settings, scope)
 
     val player = PlayerConnection(app, scope, music, artwork)

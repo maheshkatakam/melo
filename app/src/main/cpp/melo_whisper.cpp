@@ -1,6 +1,7 @@
 // JNI bridge between Melo and whisper.cpp.
 //
-// The model is streamed straight from the APK's assets (no copy on disk). Progress and
+// The built-in model is streamed straight from the APK's assets (no copy on disk); a
+// downloaded model is loaded from its file. Progress and
 // cancellation go through atomics so the Kotlin side can poll/cancel from any thread.
 
 #include <jni.h>
@@ -8,9 +9,11 @@
 #include <android/asset_manager_jni.h>
 #include <android/log.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "whisper.h"
 
@@ -102,6 +105,23 @@ Java_com_maheshkatakam_melo_lyrics_ai_WhisperNative_initFromAsset(
     return reinterpret_cast<jlong>(melo);
 }
 
+JNIEXPORT jlong JNICALL
+Java_com_maheshkatakam_melo_lyrics_ai_WhisperNative_initFromFile(JNIEnv *env, jobject, jstring file_path) {
+    const char *path = env->GetStringUTFChars(file_path, nullptr);
+    whisper_context_params cparams = whisper_context_default_params();
+    cparams.use_gpu = false;
+    whisper_context *ctx = whisper_init_from_file_with_params(path, cparams);
+    env->ReleaseStringUTFChars(file_path, path);
+    if (ctx == nullptr) {
+        LOGW("whisper_init_from_file_with_params failed");
+        return 0;
+    }
+    auto *melo = new MeloContext();
+    melo->ctx = ctx;
+    LOGI("Model loaded from file. %s", whisper_print_system_info());
+    return reinterpret_cast<jlong>(melo);
+}
+
 JNIEXPORT void JNICALL
 Java_com_maheshkatakam_melo_lyrics_ai_WhisperNative_free(JNIEnv *, jobject, jlong handle) {
     MeloContext *melo = from_handle(handle);
@@ -112,7 +132,8 @@ Java_com_maheshkatakam_melo_lyrics_ai_WhisperNative_free(JNIEnv *, jobject, jlon
 
 JNIEXPORT jint JNICALL
 Java_com_maheshkatakam_melo_lyrics_ai_WhisperNative_transcribe(
-        JNIEnv *env, jobject, jlong handle, jfloatArray samples, jint threads, jboolean translate) {
+        JNIEnv *env, jobject, jlong handle, jfloatArray samples, jint threads, jboolean translate,
+        jstring language, jstring prompt, jint beam_size, jint max_len, jboolean retries) {
     MeloContext *melo = from_handle(handle);
     if (melo == nullptr || melo->ctx == nullptr) return -100;
 
@@ -123,12 +144,35 @@ Java_com_maheshkatakam_melo_lyrics_ai_WhisperNative_transcribe(
     jfloat *data = env->GetFloatArrayElements(samples, nullptr);
     if (data == nullptr) return -101;
 
-    whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+    // Copies: whisper keeps the pointers for the whole run.
+    std::string lang = "auto";
+    if (language != nullptr) {
+        const char *l = env->GetStringUTFChars(language, nullptr);
+        if (l != nullptr && l[0] != '\0') lang = l;
+        env->ReleaseStringUTFChars(language, l);
+    }
+    std::string initial_prompt;
+    if (prompt != nullptr) {
+        const char *p = env->GetStringUTFChars(prompt, nullptr);
+        if (p != nullptr) initial_prompt = p;
+        env->ReleaseStringUTFChars(prompt, p);
+    }
+
+    whisper_full_params params = whisper_full_default_params(
+            beam_size > 1 ? WHISPER_SAMPLING_BEAM_SEARCH : WHISPER_SAMPLING_GREEDY);
+    if (beam_size > 1) params.beam_search.beam_size = beam_size;
     params.n_threads = threads;
     params.translate = translate == JNI_TRUE;
-    params.language = "auto";
+    params.language = lang.c_str();
     params.detect_language = false;
+    if (!initial_prompt.empty()) params.initial_prompt = initial_prompt.c_str();
     params.no_context = true;          // avoids repetition loops across windows
+    // Temperature fallback: when whisper isn't sure about a stretch it retries with more and
+    // more randomness. For the large model on songs that produces junk in random languages and
+    // scripts (and takes far longer), so Melo turns it off there. Tested on a Telugu film song:
+    // with retries the large model wrote nonsense; without them it wrote the actual lyrics.
+    // The small model is the opposite: without retries it gets stuck repeating one syllable.
+    if (retries != JNI_TRUE) params.temperature_inc = 0.0f;
     params.print_progress = false;
     params.print_realtime = false;
     params.print_timestamps = false;
@@ -136,7 +180,7 @@ Java_com_maheshkatakam_melo_lyrics_ai_WhisperNative_transcribe(
     params.suppress_blank = true;
     params.suppress_nst = true;        // drop music symbols and other non-speech tokens
     params.token_timestamps = true;    // needed for short, lyric-sized lines
-    params.max_len = 48;
+    params.max_len = max_len;          // in bytes: Indian scripts need ~3 bytes per letter
     params.split_on_word = true;
 
     params.progress_callback = on_progress;
@@ -192,6 +236,52 @@ JNIEXPORT jfloat JNICALL
 Java_com_maheshkatakam_melo_lyrics_ai_WhisperNative_segmentNoSpeechProb(JNIEnv *, jobject, jlong handle, jint i) {
     MeloContext *melo = from_handle(handle);
     return melo == nullptr ? 0.f : whisper_full_get_segment_no_speech_prob(melo->ctx, i);
+}
+
+// Language probabilities averaged over 30-second windows starting at the given seconds.
+// Songs often open with a long instrumental, so listening only to the start (what whisper
+// does on its own) easily picks the wrong language. Returns one value per language id.
+JNIEXPORT jfloatArray JNICALL
+Java_com_maheshkatakam_melo_lyrics_ai_WhisperNative_languageProbs(
+        JNIEnv *env, jobject, jlong handle, jfloatArray samples, jint threads, jintArray offsets_sec) {
+    MeloContext *melo = from_handle(handle);
+    const int n_lang = whisper_lang_max_id() + 1;
+    jfloatArray out = env->NewFloatArray(n_lang);
+    if (melo == nullptr || melo->ctx == nullptr || out == nullptr) return out;
+    melo->abort.store(false);
+
+    const jsize n = env->GetArrayLength(samples);
+    const jsize n_off = env->GetArrayLength(offsets_sec);
+    std::vector<jint> offsets(n_off);
+    env->GetIntArrayRegion(offsets_sec, 0, n_off, offsets.data());
+    jfloat *data = env->GetFloatArrayElements(samples, nullptr);
+    if (data == nullptr) return out;
+
+    std::vector<float> sum(n_lang, 0.f), probs(n_lang, 0.f);
+    int used = 0;
+    for (jint off : offsets) {
+        if (melo->abort.load()) break;
+        const long start = static_cast<long>(off) * WHISPER_SAMPLE_RATE;
+        if (start < 0 || start >= n) continue;
+        const int len = static_cast<int>(std::min<long>(30L * WHISPER_SAMPLE_RATE, n - start));
+        if (len < WHISPER_SAMPLE_RATE * 5) continue;
+        if (whisper_pcm_to_mel(melo->ctx, data + start, len, threads) != 0) continue;
+        if (whisper_lang_auto_detect(melo->ctx, 0, threads, probs.data()) < 0) continue;
+        for (int i = 0; i < n_lang; i++) sum[i] += probs[i];
+        used++;
+    }
+    env->ReleaseFloatArrayElements(samples, data, JNI_ABORT);
+    if (used > 0) {
+        for (float &v : sum) v /= static_cast<float>(used);
+    }
+    env->SetFloatArrayRegion(out, 0, n_lang, sum.data());
+    return out;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_maheshkatakam_melo_lyrics_ai_WhisperNative_languageCode(JNIEnv *env, jobject, jint id) {
+    const char *code = whisper_lang_str(id);
+    return env->NewStringUTF(code == nullptr ? "" : code);
 }
 
 JNIEXPORT jstring JNICALL

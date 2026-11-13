@@ -63,10 +63,12 @@ class LyricsService : Service() {
                 val leftText = if (left > 0) "$left more to go" else null
                 val notification = when {
                     job != null -> build(
-                        title = "Writing English lyrics",
+                        title = "Getting lyrics",
                         text = job.title + when (job.stage) {
+                            AiStage.SEARCHING_ONLINE -> " · looking online"
                             AiStage.DECODING -> " · reading the song"
                             AiStage.LOADING_MODEL -> " · waking up the AI"
+                            AiStage.DETECTING_LANGUAGE -> " · working out the language"
                             AiStage.LISTENING -> " · ${job.overallPercent}%"
                         },
                         progress = job.overallPercent,
@@ -74,7 +76,7 @@ class LyricsService : Service() {
                     )
                     waiting -> build(
                         title = "English lyrics paused",
-                        text = "Plug in your charger to continue · $left songs left",
+                        text = "The AI continues when you plug in your charger · $left songs left",
                         progress = null,
                         subText = null,
                     )

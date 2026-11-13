@@ -1,10 +1,10 @@
 # Melo
 
-A personal, fully offline music player for Android that tunes the sound to your mood and gives you English lyrics, even for regional songs.
+A personal, offline music player for Android that tunes the sound to your mood and gives you English lyrics, even for regional songs.
 
 ## Install on your phone
 
-1. On your phone, open this repo's **Releases** page (sign in to GitHub, since the repo is private).
+1. On your phone, open this repo's **Releases** page.
 2. Download the newest `Melo-1.0.x.apk`.
 3. Open it and allow "Install unknown apps" for your browser or Files app when Android asks.
 4. Later updates install right over the old version and keep your playlists, favorites and lyrics.
@@ -50,12 +50,16 @@ Every push to `main` builds a new APK automatically (Actions tab → "Build Melo
 - If a song has no picture, it gets a generated gradient cover, and you can choose any image yourself
 - The player's colours follow the song's picture
 
-**Lyrics, in English, offline**
+**Lyrics, in English**
 - Reads lyrics stored inside MP3, FLAC, OGG/Opus and M4A files, and `.lrc` files next to songs (timed lyrics scroll with the music)
 - You can also import an `.lrc` file or paste lyrics
-- Lyrics stored in another language are translated on the phone (one-time ~30 MB language pack per language; Hindi, Telugu, Tamil, Kannada, Marathi, Bengali, Gujarati, Urdu and many more)
-- For songs with no lyrics at all, an on-device AI (OpenAI's Whisper "small" model running through whisper.cpp) listens to the song and writes the lyrics directly in English, with timing. It works for ~99 languages, needs no internet, and takes a few minutes per song. It's best-effort: loud music over the vocals causes mistakes.
-- **Get lyrics for all songs in one tap** (card on the Home screen): works through your whole library in the background, most-played songs first, with progress and a Stop button in the notification. It carries on if you close Melo, picks up again after a restart, and by default only runs while the phone is charging (switch it off on the card). Songs with no singing are skipped next time.
+- **Real lyrics online (free)**: when the phone is online, Melo first looks the song up in [LRCLIB](https://lrclib.net), a free, open lyrics database with timed lyrics for a lot of Telugu, Tamil and Hindi film music, usually in the song's own script. Only the title, artist and album are sent. Found lyrics are saved, so they work offline afterwards. You can switch this off in Settings.
+- **On-device AI** for everything else: Whisper (via whisper.cpp) listens to the song on your phone and writes down the words in the song's own language and script, with timing. Melo then translates them to English on the phone.
+  - **Accurate model (recommended for Indian languages)**: a one-time 574 MB download (Whisper large-v3-turbo) in Settings › Lyrics. In testing on a Telugu film song it wrote the real lyrics, where the built-in model wrote nonsense. It takes a few minutes per song.
+  - The built-in model (Whisper small) is fine for English and works for clear Hindi, but it struggles with Telugu, Tamil and other Indian-language singing.
+  - Melo works out the language by listening at three points in the song, choosing only among **the languages of your songs** (Settings › Lyrics). You can also tell it a song's language yourself (lyrics screen › "Tell it the song's language", or "Wrong language? Redo in…").
+- Translation to English runs on the phone too (one-time ~30 MB language pack per language, downloaded automatically when needed; Hindi, Telugu, Tamil, Kannada, Marathi, Bengali, Gujarati, Urdu and many more). For languages the phone's translator lacks (Malayalam, Punjabi…), the AI writes the English itself.
+- **Get lyrics for all songs in one tap** (card on the Home screen): works through your whole library in the background, most-played songs first, with progress and a Stop button in the notification. Online lookups happen right away; the AI part only runs while the phone is charging (switch that off on the card). It carries on if you close Melo and picks up again after a restart. Songs with no singing are skipped next time.
 - Or turn on **Make lyrics as I listen** in Settings so each song you play gets lyrics automatically.
 
 **Identify songs around you (free, needs internet)**
@@ -68,7 +72,7 @@ Every push to `main` builds a new APK automatically (Actions tab → "Build Melo
 ## Honest limits
 
 - **Pictures**: without internet there's no way to look up the correct cover for a song that doesn't already have one. Use "Choose picture" for those.
-- **AI lyrics** are a transcription, not the official lyrics. Expect the gist, with some wrong words, especially for fast or heavily produced songs.
+- **AI lyrics** are a transcription, not the official lyrics. Expect some wrong words, especially for fast or heavily produced songs, and English translations that are rough (song lyrics are poetic). Real lyrics from LRCLIB are exact, when the song is there.
 - **Mood modes** use Android's built-in audio effects. Some phones (e.g. with Dolby Atmos switched on) or headphones with their own EQ can change the result.
 - AI lyrics need a 64-bit phone from roughly 2018 or newer. On older phones the option is hidden.
 
@@ -88,7 +92,8 @@ Release signing uses `signing/melo-release.jks` (encrypted). Its password is the
 
 - Fingerprinting is a Kotlin port of [shazamio-core](https://github.com/shazamio/shazamio-core) (MIT, Copyright (c) 2024 dotX12); see `licenses/shazamio-core-MIT.txt`.
 - 3D sound uses the MIT KEMAR HRTF measurements (Bill Gardner and Keith Martin, MIT Media Lab, 1994); see `licenses/KEMAR-HRTF.txt`.
-- On-device lyrics AI: [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) with OpenAI's Whisper model.
+- On-device lyrics AI: [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) with OpenAI's Whisper small and large-v3-turbo models (MIT).
+- Online lyrics: [LRCLIB](https://lrclib.net), a free and open lyrics database.
 - Font: Poppins (SIL Open Font License).
 
 ## Tech

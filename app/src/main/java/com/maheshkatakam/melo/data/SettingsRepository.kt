@@ -33,6 +33,12 @@ data class Settings(
     val songSort: SongSort = SongSort.TITLE,
     val autoAiLyrics: Boolean = false,
     val aiOnlyWhileCharging: Boolean = true,
+    /** Look for the real lyrics in the free LRCLIB database before using the AI. */
+    val onlineLyrics: Boolean = true,
+    /** Use the downloaded "accurate" lyrics model when it's on the phone. */
+    val accurateLyricsModel: Boolean = true,
+    /** Languages your songs are in (Whisper codes). Empty = Melo's default list. */
+    val songLanguages: Set<String> = emptySet(),
     val autoFavoriteDiscovered: Boolean = true,
     /** 3D sound on headphones. */
     val immersive: Boolean = false,
@@ -66,6 +72,9 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
         val autoAi = booleanPreferencesKey("auto_ai_lyrics")
         val aiOnlyCharging = booleanPreferencesKey("ai_only_while_charging")
         val aiQueue = stringPreferencesKey("ai_queue")
+        val accurateModel = booleanPreferencesKey("accurate_lyrics_model")
+        val onlineLyrics = booleanPreferencesKey("online_lyrics")
+        val songLanguages = stringSetPreferencesKey("song_languages")
         val autoFavDiscovered = booleanPreferencesKey("auto_favorite_discovered")
         val immersive = booleanPreferencesKey("immersive")
         val immersiveStrength = floatPreferencesKey("immersive_strength")
@@ -94,6 +103,9 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
                 songSort = p[Keys.songSort]?.let { runCatching { SongSort.valueOf(it) }.getOrNull() } ?: SongSort.TITLE,
                 autoAiLyrics = p[Keys.autoAi] ?: false,
                 aiOnlyWhileCharging = p[Keys.aiOnlyCharging] ?: true,
+                accurateLyricsModel = p[Keys.accurateModel] ?: true,
+                onlineLyrics = p[Keys.onlineLyrics] ?: true,
+                songLanguages = p[Keys.songLanguages] ?: emptySet(),
                 autoFavoriteDiscovered = p[Keys.autoFavDiscovered] ?: true,
                 immersive = p[Keys.immersive] ?: false,
                 immersiveStrength = p[Keys.immersiveStrength] ?: 0.6f,
@@ -124,6 +136,9 @@ class SettingsRepository(private val context: Context, scope: CoroutineScope) {
     fun setSongSort(sort: SongSort) = edit { it[Keys.songSort] = sort.name }
     fun setAutoAiLyrics(on: Boolean) = edit { it[Keys.autoAi] = on }
     fun setAiOnlyWhileCharging(on: Boolean) = edit { it[Keys.aiOnlyCharging] = on }
+    fun setAccurateLyricsModel(on: Boolean) = edit { it[Keys.accurateModel] = on }
+    fun setOnlineLyrics(on: Boolean) = edit { it[Keys.onlineLyrics] = on }
+    fun setSongLanguages(codes: Set<String>) = edit { it[Keys.songLanguages] = codes }
     fun setImmersive(on: Boolean) = edit { it[Keys.immersive] = on }
     fun setImmersiveStrength(v: Float) = edit { it[Keys.immersiveStrength] = v }
     fun setRestoreTreble(on: Boolean) = edit { it[Keys.restoreTreble] = on }
