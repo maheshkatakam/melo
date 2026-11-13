@@ -116,6 +116,23 @@ class LyricsRepository(
         .map { rows -> rows.filter { it.hasEnglish || it.source == LyricsSource.AI || it.source == LyricsSource.ONLINE }.map { it.songId }.toSet() }
         .stateIn(scope, SharingStarted.Eagerly, emptySet())
 
+    /**
+     * Songs done by the old AI (before Melo 1.0.11): it guessed the language from the intro and
+     * often wrote junk for Indian-language songs, or wrongly marked them as having no singing.
+     */
+    val oldAiCount: Flow<Int> = dao.observeAiCountBefore(NEW_AI_SINCE)
+
+    /** Clears the old AI's lyrics and puts those songs through the new pipeline. */
+    fun redoOldAi() {
+        scope.launch {
+            val ids = dao.aiSongsBefore(NEW_AI_SINCE)
+            if (ids.isEmpty()) return@launch
+            ids.chunked(500).forEach { dao.deleteAll(it) }
+            val set = ids.toSet()
+            requestAiForAll(music.songs.value.filter { it.id in set })
+        }
+    }
+
     /** Songs the AI tried but heard no singing in (usually instrumentals). */
     val noSingingIds: StateFlow<Set<Long>> = status
         .map { rows -> rows.filter { it.source == LyricsSource.AI_FAILED }.map { it.songId }.toSet() }
@@ -519,6 +536,9 @@ class LyricsRepository(
     private fun now() = System.currentTimeMillis()
 
     companion object {
+        /** When the new lyrics AI shipped (13 Nov 2026, 17:00 UTC). Older AI rows came from the old one. */
+        private const val NEW_AI_SINCE = 1_794_589_200_000L
+
         /** Songs "Get all lyrics" doesn't need to do again. */
         private val DONE_SOURCES = setOf(LyricsSource.AI_FAILED, LyricsSource.AI, LyricsSource.ONLINE)
     }

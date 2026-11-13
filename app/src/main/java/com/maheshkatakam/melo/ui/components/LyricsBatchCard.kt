@@ -55,6 +55,7 @@ fun LyricsBatchCard(modifier: Modifier = Modifier, showWhenDone: Boolean = false
     val english by repo.doneIds.collectAsStateWithLifecycle()
     val modelState by container.aiEngine.models.state.collectAsStateWithLifecycle()
     val noSinging by repo.noSingingIds.collectAsStateWithLifecycle()
+    val oldAi by repo.oldAiCount.collectAsStateWithLifecycle(initialValue = 0)
     val queue by repo.aiQueue.collectAsStateWithLifecycle()
     val job by repo.aiJob.collectAsStateWithLifecycle()
     val waiting by repo.waitingForCharger.collectAsStateWithLifecycle()
@@ -66,7 +67,7 @@ fun LyricsBatchCard(modifier: Modifier = Modifier, showWhenDone: Boolean = false
     val skipped = remember(noSinging, english, ids) { noSinging.count { it in ids && it !in english } }
     val remaining = (songs.size - ready - skipped).coerceAtLeast(0)
     val busy = job != null || queue.isNotEmpty()
-    if (!busy && remaining == 0 && !showWhenDone) return
+    if (!busy && remaining == 0 && oldAi == 0 && !showWhenDone) return
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -153,6 +154,19 @@ fun LyricsBatchCard(modifier: Modifier = Modifier, showWhenDone: Boolean = false
                         Spacer(Modifier.width(8.dp))
                         Text("Get lyrics for $remaining songs")
                     }
+                }
+            }
+
+            if (!busy && oldAi > 0) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "$oldAi " + (if (oldAi == 1) "song has" else "songs have") + " lyrics (or a \"no singing\" mark) from Melo's old AI, " +
+                        "which often got Indian-language songs wrong. The new one does much better.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = { repo.redoOldAi() }) {
+                    Text(if (oldAi == 1) "Redo it with the new AI" else "Redo those $oldAi songs with the new AI")
                 }
             }
 

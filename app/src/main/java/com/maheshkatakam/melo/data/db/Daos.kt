@@ -109,6 +109,16 @@ interface LyricsDao {
     @Query("DELETE FROM lyrics WHERE source = 'none'")
     suspend fun deleteMisses()
 
+    /** AI lyrics (and "no singing" marks) written before [before]. */
+    @Query("SELECT songId FROM lyrics WHERE source IN ('ai', 'ai_failed') AND updatedAt < :before")
+    suspend fun aiSongsBefore(before: Long): List<Long>
+
+    @Query("SELECT COUNT(*) FROM lyrics WHERE source IN ('ai', 'ai_failed') AND updatedAt < :before")
+    fun observeAiCountBefore(before: Long): Flow<Int>
+
+    @Query("DELETE FROM lyrics WHERE songId IN (:ids)")
+    suspend fun deleteAll(ids: List<Long>)
+
     @Query("SELECT songId FROM lyrics WHERE source = 'ai' OR english IS NOT NULL")
     suspend fun songsWithEnglish(): List<Long>
 
