@@ -157,10 +157,10 @@ fun SongMenuSheet(song: Song, playlistId: Long?, onDismiss: () -> Unit) {
                 onDismiss()
                 navigator.openArtist(MusicRepository.primaryArtist(song.artist))
             }
-            MenuItem(Icons.Rounded.AutoAwesome, "Make English lyrics with AI") {
+            MenuItem(Icons.Rounded.AutoAwesome, "Get English lyrics") {
                 container.lyrics.requestAi(song)
                 if (container.aiEngine.isSupported) {
-                    Toast.makeText(context, "Added to the AI lyrics queue", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Getting lyrics: online first, then the AI", Toast.LENGTH_SHORT).show()
                 }
                 onDismiss()
             }

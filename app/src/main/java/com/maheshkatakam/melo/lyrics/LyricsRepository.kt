@@ -111,6 +111,11 @@ class LyricsRepository(
         .map { rows -> rows.filter { it.hasEnglish }.map { it.songId }.toSet() }
         .stateIn(scope, SharingStarted.Eagerly, emptySet())
 
+    /** Songs that have lyrics now or that "Get all lyrics" has finished with. */
+    val doneIds: StateFlow<Set<Long>> = status
+        .map { rows -> rows.filter { it.hasEnglish || it.source == LyricsSource.AI || it.source == LyricsSource.ONLINE }.map { it.songId }.toSet() }
+        .stateIn(scope, SharingStarted.Eagerly, emptySet())
+
     /** Songs the AI tried but heard no singing in (usually instrumentals). */
     val noSingingIds: StateFlow<Set<Long>> = status
         .map { rows -> rows.filter { it.source == LyricsSource.AI_FAILED }.map { it.songId }.toSet() }

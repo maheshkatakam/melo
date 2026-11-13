@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.maheshkatakam.melo.lyrics.ai.ModelState
 import com.maheshkatakam.melo.ui.LocalContainer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -51,7 +52,8 @@ fun LyricsBatchCard(modifier: Modifier = Modifier, showWhenDone: Boolean = false
     if (supported != true) return
 
     val songs by container.music.songs.collectAsStateWithLifecycle()
-    val english by repo.englishIds.collectAsStateWithLifecycle()
+    val english by repo.doneIds.collectAsStateWithLifecycle()
+    val modelState by container.aiEngine.models.state.collectAsStateWithLifecycle()
     val noSinging by repo.noSingingIds.collectAsStateWithLifecycle()
     val queue by repo.aiQueue.collectAsStateWithLifecycle()
     val job by repo.aiJob.collectAsStateWithLifecycle()
@@ -81,7 +83,7 @@ fun LyricsBatchCard(modifier: Modifier = Modifier, showWhenDone: Boolean = false
                 )
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
-                    Text("English lyrics for all songs", style = MaterialTheme.typography.titleSmall)
+                    Text("Lyrics for all songs", style = MaterialTheme.typography.titleSmall)
                     Text(
                         "$ready of ${songs.size} songs ready" + if (skipped > 0) " · $skipped without singing" else "",
                         style = MaterialTheme.typography.bodySmall,
@@ -124,7 +126,7 @@ fun LyricsBatchCard(modifier: Modifier = Modifier, showWhenDone: Boolean = false
                     )
                 }
                 remaining == 0 -> Text(
-                    "Every song has English lyrics. New songs you add can be done the same way.",
+                    "Every song has lyrics. New songs you add can be done the same way.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -135,6 +137,16 @@ fun LyricsBatchCard(modifier: Modifier = Modifier, showWhenDone: Boolean = false
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (modelState !is ModelState.Ready && modelState !is ModelState.Downloading && modelState !is ModelState.Checking) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Songs in Telugu, Hindi, Tamil or another Indian language? Get the accurate AI model first " +
+                                "(${container.aiEngine.models.accurate.sizeBytes / (1024 * 1024)} MB, one time). The built-in one struggles with them.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        TextButton(onClick = { container.aiEngine.models.download() }) { Text("Download the accurate model") }
+                    }
                     Spacer(Modifier.height(10.dp))
                     Button(onClick = { repo.requestAiForAll() }) {
                         Icon(Icons.Rounded.AutoAwesome, null, modifier = Modifier.size(18.dp))

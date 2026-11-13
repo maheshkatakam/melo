@@ -107,14 +107,19 @@ class AiLyricsEngine(
             }
             if (samples.size < AudioDecoder.TARGET_RATE * 3) throw NoSingingException("The song is too short.")
 
-            onProgress(AiStage.LOADING_MODEL, 0)
             val accurateFile = if (settings.settings.value.accurateLyricsModel) models.readyFile() else null
-            val h = withContext(Dispatchers.IO) { ensureModel(accurateFile) }
 
+            // The language is always worked out with the built-in model: in tests it was right
+            // far more often than the large one, whose guesses were often "English" or "Tamil"
+            // for Kannada, Hindi and Telugu songs.
             val lang = language ?: run {
+                onProgress(AiStage.LOADING_MODEL, 0)
+                val small = withContext(Dispatchers.IO) { ensureModel(null) }
                 onProgress(AiStage.DETECTING_LANGUAGE, 0)
-                detectLanguage(h, samples)
+                detectLanguage(small, samples, metadataHint(song))
             }
+            onProgress(AiStage.LOADING_MODEL, 0)
+            val h = withContext(Dispatchers.IO) { ensureModel(accurateFile) }
             val english = lang == "en"
             val prompt = SongLanguages.get(lang)?.prompt?.takeIf { it.isNotEmpty() }
 
@@ -178,7 +183,7 @@ class AiLyricsEngine(
      * Listens to three 30-second stretches spread through the song (intros are often
      * instrumental) and picks the most likely of your song languages.
      */
-    private suspend fun detectLanguage(h: Long, samples: FloatArray): String {
+    private suspend fun detectLanguage(h: Long, samples: FloatArray, hint: String?): String {
         val seconds = samples.size / AudioDecoder.TARGET_RATE
         val offsets = if (seconds <= 45) {
             intArrayOf(0)
@@ -192,13 +197,27 @@ class AiLyricsEngine(
         for (id in probs.indices) {
             val code = WhisperNative.languageCode(id)
             if (code !in wanted) continue
-            if (probs[id] > bestP) {
-                bestP = probs[id]
+            // A folder called "Telugu songs" or a title in Tamil script is a strong clue.
+            val p = probs[id] + if (code == hint) HINT_BONUS else 0f
+            if (p > bestP) {
+                bestP = p
                 best = code
             }
         }
-        Log.i(TAG, "Language: $best (p=$bestP) from windows ${offsets.joinToString()}")
+        Log.i(TAG, "Language: $best (score $bestP, hint $hint) from windows ${offsets.joinToString()}")
         return best
+    }
+
+    /**
+     * A language clue from the song's details: words like "Telugu" or "Tollywood" in the folder,
+     * album or title, or a title written in an Indian script.
+     */
+    private fun metadataHint(song: Song): String? {
+        val text = listOf(song.path.orEmpty(), song.album, song.title, song.artist).joinToString(" ")
+        for ((pattern, code) in NAME_HINTS) if (pattern.containsMatchIn(text)) return code
+        val scriptText = listOf(song.title, song.album, song.artist).joinToString(" ")
+        return SongLanguages.all.map { it.code }
+            .firstOrNull { code -> ScriptCheck.knows(code) && ScriptCheck.share(scriptText, code) >= 0.5f }
     }
 
     /** Runs a blocking native call; cancelling the coroutine aborts whisper. */
@@ -310,7 +329,7 @@ class AiLyricsEngine(
     }
 
     /**
-     * Splits a long line at the word gap nearest its middle until each piece is about 45
+     * Splits a long line at the word gap nearest its middle until each piece is about 52
      * letters or less. Returns (piece, letters before it, total letters) so the caller can
      * spread the timing over the pieces.
      */
@@ -347,9 +366,23 @@ class AiLyricsEngine(
     companion object {
         private const val TAG = "MeloAI"
         private const val BEAM_SIZE = 1
-        private const val MAX_LINE = 45
-        /** The same 1–8 characters four or more times in a row: the model got stuck. */
-        private val STUCK = Regex("""(.{1,8}?)\1{3,}""")
+        private const val MAX_LINE = 52
+        private const val HINT_BONUS = 0.35f
+        /** Words in a folder, album or title that give the language away ("Telugu_Songs", "[iSongs.info]"). */
+        private val NAME_HINTS = listOf(
+            "telugu|tollywood|isongs|naa ?songs|teluguwap" to "te",
+            "tamil|kollywood|masstamilan|starmusiq|isaimini" to "ta",
+            "kannada|sandalwood" to "kn",
+            "malayalam|mollywood" to "ml",
+            "hindi|bollywood|songspk|pagalworld" to "hi",
+            "marathi" to "mr",
+            "bengali|bangla" to "bn",
+            "punjabi|djpunjab" to "pa",
+            "gujarati" to "gu",
+        ).map { (words, code) -> Regex("""(?<![A-Za-z])($words)""", RegexOption.IGNORE_CASE) to code }
+
+        /** The same 1–30 characters four or more times in a row: the model got stuck. */
+        private val STUCK = Regex("""(.{1,30}?)\1{3,}""")
         private val HALLUCINATIONS = Regex(
             """thank(s| you) (so much )?for watching|please subscribe|like and subscribe|subtitles? by|amara\.org|""" +
                 """transcribed by|translated by|www\.|\.com\b|सब्सक्राइब|సబ్‌?స్క్రైబ్|சப்ஸ்க்ரைப்""",
